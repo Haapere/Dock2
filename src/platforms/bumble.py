@@ -55,8 +55,8 @@ class BumblePlatform(DatingPlatform):
         except Exception:
             pass
 
-        log.info("[yellow]Bitte manuell einloggen. Drücke Enter wenn fertig...[/yellow]")
-        input()
+        log.info("[yellow]Browser ist offen. Bitte einloggen, dann Enter drücken...[/yellow]")
+        input("  → Fertig? Enter drücken: ")
 
         if await self._is_logged_in():
             await self.browser.save_session()

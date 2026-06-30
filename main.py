@@ -169,5 +169,68 @@ def status(ctx):
     asyncio.run(_login_and_run(cfg, run))
 
 
+@cli.command()
+@click.pass_context
+def login(ctx):
+    """Nur einloggen und Session speichern (für spätere Läufe)."""
+    cfg = ctx.obj["cfg"]
+
+    async def run(platform):
+        log.info("[green]Login erfolgreich — Session gespeichert.[/green]")
+        log.info("Du kannst jetzt 'python main.py swipen' oder 'chat' starten.")
+
+    asyncio.run(_login_and_run(cfg, run))
+
+
+@cli.command("session-import")
+@click.argument("cookies_file")
+@click.pass_context
+def session_import(ctx, cookies_file):
+    """Session aus exportierter Cookies-Datei importieren.
+
+    COOKIES_FILE: Pfad zur JSON-Datei (Export aus EditThisCookie / Cookie-Editor).
+    """
+    import json
+    from pathlib import Path
+
+    cfg = ctx.obj["cfg"]
+    src = Path(cookies_file)
+    if not src.exists():
+        console.print(f"[red]Datei nicht gefunden: {cookies_file}[/red]")
+        sys.exit(1)
+
+    with open(src) as f:
+        raw = json.load(f)
+
+    # Unterstützt EditThisCookie-Format (Liste) und Playwright-Format (storage_state)
+    if isinstance(raw, list):
+        storage = {
+            "cookies": [
+                {
+                    "name": c.get("name", ""),
+                    "value": c.get("value", ""),
+                    "domain": c.get("domain", ".tinder.com"),
+                    "path": c.get("path", "/"),
+                    "expires": c.get("expirationDate", -1),
+                    "httpOnly": c.get("httpOnly", False),
+                    "secure": c.get("secure", True),
+                    "sameSite": "None",
+                }
+                for c in raw
+            ],
+            "origins": []
+        }
+    else:
+        storage = raw
+
+    session_file = Path(cfg.get("session_file", "sessions/session.json"))
+    session_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(session_file, "w") as f:
+        json.dump(storage, f, indent=2)
+
+    console.print(f"[green]Session importiert → {session_file}[/green]")
+    console.print("Starte jetzt: python main.py swipen")
+
+
 if __name__ == "__main__":
     cli(obj={})

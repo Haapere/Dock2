@@ -66,15 +66,20 @@ class TinderPlatform(DatingPlatform):
             except Exception:
                 pass
 
-        # Phone-Login
+        # Phone-Login automatisch durchführen
         try:
             await self.browser.human_click("text=Mit Handynummer anmelden", timeout=8000)
             await self.browser.random_delay()
+            logged_in = await self._phone_login_flow()
+            if logged_in:
+                await self.browser.save_session()
+                return True
         except Exception:
             pass
 
-        log.info("[yellow]Bitte manuell einloggen. Drücke Enter wenn fertig...[/yellow]")
-        input()
+        # Fallback: manueller Login
+        log.info("[yellow]Browser ist offen. Bitte einloggen, dann Enter drücken...[/yellow]")
+        input("  → Fertig? Enter drücken: ")
 
         if await self._is_logged_in():
             await self.browser.save_session()
@@ -83,6 +88,82 @@ class TinderPlatform(DatingPlatform):
 
         log.error("Login fehlgeschlagen")
         return False
+
+    async def _phone_login_flow(self) -> bool:
+        page = await self._get_page()
+
+        # Land wählen (falls nötig)
+        try:
+            country_sel = await page.wait_for_selector(
+                'button[data-testid="phone-country-code"], .countryCodeFlag',
+                timeout=5000
+            )
+            if country_sel:
+                log.info("Land wird automatisch erkannt...")
+        except Exception:
+            pass
+
+        # Handynummer eingeben
+        phone = input("  Handynummer (mit Ländercode, z.B. +4917612345678): ").strip()
+        if not phone:
+            return False
+
+        try:
+            phone_input = await page.wait_for_selector(
+                'input[type="tel"], input[name="phone"]',
+                timeout=8000
+            )
+            await phone_input.click()
+            # Nur Ziffern ohne + tippen falls Feld es nicht akzeptiert
+            clean = phone.lstrip("+")
+            await page.keyboard.type(clean, delay=80)
+            await self.browser.random_delay(0.5, 1.0)
+
+            # Weiter-Button
+            await self.browser.human_click(
+                'button[type="submit"], button:has-text("Weiter"), button:has-text("Continue")',
+                timeout=5000
+            )
+            await self.browser.random_delay(2, 4)
+        except Exception as e:
+            log.warning(f"Telefon-Eingabe fehlgeschlagen: {e}")
+            return False
+
+        # SMS-Code eingeben
+        code = input("  SMS-Code eingeben: ").strip()
+        if not code:
+            return False
+
+        try:
+            # Code-Eingabe (oft einzelne Felder)
+            code_inputs = await page.query_selector_all('input[data-testid*="otp"], input[maxlength="1"]')
+            if code_inputs and len(code_inputs) >= len(code):
+                for i, digit in enumerate(code):
+                    await code_inputs[i].type(digit, delay=120)
+            else:
+                code_input = await page.wait_for_selector(
+                    'input[type="tel"], input[name="otp"], input[autocomplete="one-time-code"]',
+                    timeout=5000
+                )
+                await code_input.type(code, delay=100)
+
+            await self.browser.random_delay(1, 2)
+
+            # Auto-Submit oder Button
+            try:
+                await self.browser.human_click(
+                    'button[type="submit"], button:has-text("Weiter")',
+                    timeout=5000
+                )
+            except Exception:
+                pass
+
+            await self.browser.random_delay(3, 5)
+        except Exception as e:
+            log.warning(f"Code-Eingabe fehlgeschlagen: {e}")
+            return False
+
+        return await self._is_logged_in()
 
     async def _is_logged_in(self) -> bool:
         page = await self._get_page()
