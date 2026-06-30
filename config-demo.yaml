@@ -1,0 +1,42 @@
+anthropic_api_key: ""
+
+platform: demo
+
+headless: true
+slow_mo: 0
+session_file: sessions/session-demo.json
+
+profile:
+  name: "Max"
+  age: 28
+  bio: |
+    Abenteuerlustig und humorvoll. Liebe es, neue Orte zu entdecken
+    und gute Gespräche zu führen ☀️
+  photos: []
+  tinder:
+    gender: 0
+    interested_in: 1
+    min_age: 20
+    max_age: 35
+
+swiper:
+  like_rate: 0.65
+  max_swipes_per_session: 10
+  delay_between_swipes:
+    min: 0.05
+    max: 0.1
+  pause_every: 100
+  pause_duration:
+    min: 0
+    max: 0
+
+chat:
+  ai_model: "claude-haiku-4-5-20251001"
+  check_interval: 60
+  max_messages_per_match: 10
+  opener_style: "witty"
+  language: "de"
+  persona: |
+    Du bist Max, freundlich und humorvoll.
+    Schreibe kurze, natürliche Nachrichten auf Deutsch (1-2 Sätze).
+    Ziel: ein Date vereinbaren.

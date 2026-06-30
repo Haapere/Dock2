@@ -23,6 +23,8 @@ class AutoSwiper:
         return random.random() < like_rate
 
     async def _handle_popups(self):
+        if not hasattr(self.platform, "browser") or self.platform.browser is None:
+            return
         page = self.platform.browser.page
         popup_selectors = [
             '[aria-label="Nicht jetzt"], button:has-text("Nicht jetzt")',
@@ -38,6 +40,11 @@ class AutoSwiper:
                 pass
 
     async def _check_for_match(self):
+        if not hasattr(self.platform, "browser") or self.platform.browser is None:
+            if random.random() < 0.05:
+                self.stats["matches"] += 1
+                log.info("[bold yellow]🎉 MATCH! (simuliert)[/bold yellow]")
+            return
         page = self.platform.browser.page
         try:
             match_el = await page.wait_for_selector(
@@ -76,13 +83,15 @@ class AutoSwiper:
         console.rule("[bold blue]Auto-Swiper gestartet[/bold blue]")
         log.info(f"Ziel: {max_swipes} Swipes | Like-Rate: {self.swiper_cfg.get('like_rate', 0.65)*100:.0f}%")
 
-        page = self.platform.browser.page
-        try:
-            from src.platforms.tinder import TINDER_APP_URL
-            await page.goto(TINDER_APP_URL, wait_until="networkidle")
-        except ImportError:
-            pass
-        await asyncio.sleep(2)
+        has_browser = hasattr(self.platform, "browser") and self.platform.browser is not None
+        if has_browser:
+            page = self.platform.browser.page
+            try:
+                from src.platforms.tinder import TINDER_APP_URL
+                await page.goto(TINDER_APP_URL, wait_until="networkidle")
+            except ImportError:
+                pass
+            await asyncio.sleep(2)
 
         with Progress(
             SpinnerColumn(),

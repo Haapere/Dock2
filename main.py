@@ -14,19 +14,30 @@ console = Console()
 log = get_logger(__name__)
 
 
-def get_platform(cfg: dict, browser: BrowserManager):
+def get_platform(cfg: dict, browser: BrowserManager | None = None):
     platform_name = cfg.get("platform", "tinder").lower()
-    if platform_name == "tinder":
+    if platform_name == "demo":
+        from src.platforms.demo import DemoPlatform
+        return DemoPlatform(cfg)
+    elif platform_name == "tinder":
         from src.platforms.tinder import TinderPlatform
         return TinderPlatform(browser, cfg)
     elif platform_name == "bumble":
         from src.platforms.bumble import BumblePlatform
         return BumblePlatform(browser, cfg)
     else:
-        raise ValueError(f"Unbekannte Plattform: {platform_name}. Verwende 'tinder' oder 'bumble'.")
+        raise ValueError(f"Unbekannte Plattform: {platform_name}. Verwende 'tinder', 'bumble' oder 'demo'.")
 
 
 async def _login_and_run(cfg: dict, action_fn):
+    is_demo = cfg.get("platform", "").lower() == "demo"
+
+    if is_demo:
+        platform = get_platform(cfg)
+        await platform.login()
+        await action_fn(platform)
+        return
+
     browser = BrowserManager(cfg)
     try:
         await browser.start()
