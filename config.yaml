@@ -7,7 +7,7 @@ anthropic_api_key: ""  # or set via ANTHROPIC_API_KEY env var
 platform: tinder  # tinder | bumble
 
 # Browser settings
-headless: false          # false = sichtbarer Browser, true = unsichtbar
+headless: false          # false = sichtbarer Browser (lokal), true = unsichtbar (Server)
 slow_mo: 50             # Millisekunden Verzögerung zwischen Aktionen
 
 # Session

@@ -20,15 +20,21 @@ class BrowserManager:
 
     async def start(self) -> Page:
         self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(
-            headless=self.cfg.get("headless", False),
-            slow_mo=self.cfg.get("slow_mo", 50),
-            args=[
+        import os
+        launch_kwargs: dict = {
+            "headless": self.cfg.get("headless", False),
+            "slow_mo": self.cfg.get("slow_mo", 50),
+            "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
             ],
-        )
+        }
+        # Systemchromium bevorzugen falls vorhanden
+        if os.path.exists("/opt/pw-browsers/chromium"):
+            launch_kwargs["executable_path"] = "/opt/pw-browsers/chromium"
+
+        self.browser = await self.playwright.chromium.launch(**launch_kwargs)
 
         storage_state = None
         if self.session_file.exists():
