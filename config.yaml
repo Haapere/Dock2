@@ -1,0 +1,65 @@
+# Dating App Automation Configuration
+
+# Anthropic API Key for AI chat
+anthropic_api_key: ""  # or set via ANTHROPIC_API_KEY env var
+
+# Platform settings
+platform: tinder  # tinder | bumble
+
+# Browser settings
+headless: false          # false = sichtbarer Browser, true = unsichtbar
+slow_mo: 50             # Millisekunden Verzögerung zwischen Aktionen
+
+# Session
+session_file: sessions/session.json   # gespeicherte Login-Session
+
+# Profile settings
+profile:
+  name: "Max"
+  age: 28
+  bio: |
+    Abenteuerlustig und humorvoll. Liebe es, neue Orte zu entdecken
+    und gute Gespräche zu führen. Suche jemanden, mit dem ich die
+    Welt erkunden kann ☀️
+  photos:
+    - photos/photo1.jpg
+    - photos/photo2.jpg
+  # Tinder-spezifische Einstellungen
+  tinder:
+    gender: 0           # 0=Mann, 1=Frau
+    interested_in: 1    # 0=Mann, 1=Frau, -1=Alle
+    min_age: 20
+    max_age: 35
+    distance_km: 50
+  # Bumble-spezifische Einstellungen
+  bumble:
+    gender: male
+    interested_in: female
+    min_age: 20
+    max_age: 35
+
+# Swipe settings
+swiper:
+  like_rate: 0.65          # Anteil der Likes (0.0 - 1.0)
+  max_swipes_per_session: 100
+  delay_between_swipes:
+    min: 1.5
+    max: 4.0              # Sekunden (zufällig zwischen min und max)
+  pause_every: 20         # Pause nach dieser Anzahl Swipes
+  pause_duration:
+    min: 30
+    max: 90               # Sekunden
+
+# Chat settings
+chat:
+  ai_model: "claude-haiku-4-5-20251001"
+  check_interval: 300     # Sekunden zwischen Match-Checks
+  max_messages_per_match: 10
+  opener_style: "witty"   # witty | friendly | direct | question
+  language: "de"          # de | en
+  persona: |
+    Du bist Max, ein freundlicher und humorvoller Mann.
+    Schreib natürlich, authentisch und interessiert.
+    Stelle echte Fragen, die zeigen, dass du zuhörst.
+    Kurze Nachrichten sind besser als lange.
+    Ziel ist ein echtes Date zu vereinbaren.
