@@ -183,53 +183,109 @@ def login(ctx):
 
 
 @cli.command("session-import")
-@click.argument("cookies_file")
+@click.argument("session_file_arg", metavar="FILE", default="-")
 @click.pass_context
-def session_import(ctx, cookies_file):
-    """Session aus exportierter Cookies-Datei importieren.
+def session_import(ctx, session_file_arg):
+    """Session aus Chrome exportieren und importieren.
 
-    COOKIES_FILE: Pfad zur JSON-Datei (Export aus EditThisCookie / Cookie-Editor).
+    FILE: Pfad zur JSON-Datei oder '-' für stdin (Standard).
+
+    Exportiere die Session in Chrome DevTools Console mit:
+        copy(JSON.stringify({
+          cookies: document.cookie.split(';').map(c => {
+            const [n, ...v] = c.trim().split('=');
+            return {name: n, value: v.join('='), domain: '.tinder.com', path: '/'};
+          }),
+          localStorage: Object.fromEntries(Object.entries(localStorage))
+        }))
     """
     import json
     from pathlib import Path
 
     cfg = ctx.obj["cfg"]
-    src = Path(cookies_file)
-    if not src.exists():
-        console.print(f"[red]Datei nicht gefunden: {cookies_file}[/red]")
+
+    if session_file_arg == "-":
+        console.print("[cyan]Paste den JSON-Output aus Chrome DevTools, dann Strg+D:[/cyan]")
+        raw_text = sys.stdin.read().strip()
+    else:
+        src = Path(session_file_arg)
+        if not src.exists():
+            console.print(f"[red]Datei nicht gefunden: {session_file_arg}[/red]")
+            sys.exit(1)
+        raw_text = src.read_text()
+
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]Ungültiges JSON: {e}[/red]")
         sys.exit(1)
 
-    with open(src) as f:
-        raw = json.load(f)
+    storage = _build_storage_state(raw)
 
-    # Unterstützt EditThisCookie-Format (Liste) und Playwright-Format (storage_state)
-    if isinstance(raw, list):
-        storage = {
-            "cookies": [
-                {
-                    "name": c.get("name", ""),
-                    "value": c.get("value", ""),
-                    "domain": c.get("domain", ".tinder.com"),
-                    "path": c.get("path", "/"),
-                    "expires": c.get("expirationDate", -1),
-                    "httpOnly": c.get("httpOnly", False),
-                    "secure": c.get("secure", True),
-                    "sameSite": "None",
-                }
-                for c in raw
-            ],
-            "origins": []
-        }
-    else:
-        storage = raw
-
-    session_file = Path(cfg.get("session_file", "sessions/session.json"))
-    session_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(session_file, "w") as f:
+    dest = Path(cfg.get("session_file", "sessions/session.json"))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with open(dest, "w") as f:
         json.dump(storage, f, indent=2)
 
-    console.print(f"[green]Session importiert → {session_file}[/green]")
-    console.print("Starte jetzt: python main.py swipen")
+    n_cookies = len(storage.get("cookies", []))
+    n_origins = sum(
+        len(o.get("localStorage", [])) for o in storage.get("origins", [])
+    )
+    console.print(f"[green]Session importiert → {dest}[/green]")
+    console.print(f"  {n_cookies} Cookies, {n_origins} localStorage-Einträge")
+    console.print("Starte jetzt: [bold]python main.py swipen[/bold]")
+
+
+def _build_storage_state(raw: dict | list) -> dict:
+    """Konvertiert verschiedene Export-Formate in Playwright storage_state."""
+    # Bereits Playwright-Format
+    if isinstance(raw, dict) and "cookies" in raw and "origins" in raw:
+        # Evtl. localStorage im flachen Format nachliefern
+        if "localStorage" in raw:
+            local = raw["localStorage"]
+            raw.setdefault("origins", [])
+            raw["origins"].append({
+                "origin": "https://tinder.com",
+                "localStorage": [{"name": k, "value": str(v)} for k, v in local.items()]
+            })
+            del raw["localStorage"]
+        return raw
+
+    # Unser kombiniertes Chrome-Export-Format: {cookies: [...], localStorage: {...}}
+    if isinstance(raw, dict) and "cookies" in raw:
+        cookies = raw["cookies"]
+        local = raw.get("localStorage", {})
+    elif isinstance(raw, list):
+        # Reines Cookie-Array (EditThisCookie / Cookie-Editor)
+        cookies = raw
+        local = {}
+    else:
+        cookies = []
+        local = {}
+
+    def normalize_cookie(c: dict) -> dict:
+        return {
+            "name": c.get("name", ""),
+            "value": c.get("value", ""),
+            "domain": c.get("domain", ".tinder.com"),
+            "path": c.get("path", "/"),
+            "expires": float(c.get("expirationDate", c.get("expires", -1))),
+            "httpOnly": bool(c.get("httpOnly", False)),
+            "secure": bool(c.get("secure", True)),
+            "sameSite": c.get("sameSite", "None"),
+        }
+
+    origins = []
+    if local:
+        origins.append({
+            "origin": "https://tinder.com",
+            "localStorage": [{"name": k, "value": str(v)} for k, v in local.items()]
+        })
+
+    return {
+        "cookies": [normalize_cookie(c) for c in cookies],
+        "origins": origins,
+    }
 
 
 if __name__ == "__main__":
