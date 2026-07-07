@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strategylab"
+version = "0.1.0"
+description = "Werkzeug zum Entwickeln, Backtesten und Forward-Testen von Trading-Strategien"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+strategylab = "strategylab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["strategylab*"]
