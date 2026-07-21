@@ -57,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch.add_argument("--symbol", required=True, help="z.B. aapl.us, sap.de, ^spx")
     p_fetch.add_argument("--out", required=True, help="Ziel-CSV")
 
+    # gui
+    p_gui = sub.add_parser("gui", help="Grafische Web-Oberfläche im Browser öffnen")
+    p_gui.add_argument("--port", type=int, default=8765, help="Port (Default: 8765)")
+    p_gui.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch öffnen")
+
     # list
     sub.add_parser("list", help="Verfügbare Strategien anzeigen")
 
@@ -119,6 +124,13 @@ def cmd_data(args: argparse.Namespace) -> int:
         data_mod.save_csv(df, args.out)
         print(f"{len(df)} Tage für {args.symbol} nach {args.out} geschrieben "
               f"({df.index[0].date()} bis {df.index[-1].date()})")
+    return 0
+
+
+def cmd_gui(args: argparse.Namespace) -> int:
+    from strategylab import webapp
+
+    webapp.serve(port=args.port, open_browser=not args.no_browser)
     return 0
 
 
@@ -190,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handlers = {
         "data": cmd_data,
+        "gui": cmd_gui,
         "list": cmd_list,
         "backtest": cmd_backtest,
         "optimize": cmd_optimize,

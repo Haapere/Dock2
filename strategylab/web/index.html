@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StrategyLab</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #1a2130; --panel2: #222b3d; --line: #2e3a52;
+    --text: #e6ebf5; --muted: #93a1bd; --accent: #4f8cff; --accent2: #2ecc71;
+    --danger: #ff5c6c; --warn: #ffb648; --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 15px; }
+  header { padding: 18px 24px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 14px; background: var(--panel); }
+  header h1 { margin: 0; font-size: 1.35rem; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: .9rem; }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px 20px; margin-bottom: 18px; }
+  .panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  .panel .hint { color: var(--muted); font-size: .85rem; margin: 0 0 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  input, select { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: .92rem; min-width: 90px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  button { background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: .92rem; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(1.08); }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tabs button { background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+    font-weight: 500; }
+  .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab { display: none; } .tab.active { display: block; }
+  canvas { width: 100%; height: auto; display: block; background: var(--panel2);
+    border-radius: 8px; margin-top: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; }
+  .scroll { overflow-x: auto; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-top: 6px; }
+  .metric { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .metric .k { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .4px; }
+  .metric .v { font-size: 1.25rem; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--accent2); } .neg { color: var(--danger); }
+  .status { padding: 10px 14px; border-radius: 8px; font-size: .88rem; margin-top: 10px; }
+  .status.ok { background: rgba(46,204,113,.12); color: #7fe6a8; border: 1px solid rgba(46,204,113,.3); }
+  .status.err { background: rgba(255,92,108,.12); color: #ff9aa4; border: 1px solid rgba(255,92,108,.3); }
+  .status.info { background: rgba(79,140,255,.1); color: #9dc0ff; border: 1px solid rgba(79,140,255,.3); }
+  .legend { display: flex; gap: 16px; font-size: .82rem; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
+    border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .muted { color: var(--muted); } .grid-inputs { display: grid; gap: 12px; }
+  .note { font-size: .8rem; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+  details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>StrategyLab</h1>
+  <span class="sub">Trading-Strategien entwickeln, backtesten &amp; auf Zukunftstauglichkeit prüfen</span>
+</header>
+
+<main>
+  <!-- DATEN -->
+  <section class="panel">
+    <h2>1 · Kursdaten laden</h2>
+    <p class="hint">Womit soll gerechnet werden? Demo-Daten erzeugen, echte Kurse laden oder eine eigene CSV-Datei hochladen.</p>
+    <div class="row">
+      <div class="field"><label>Demo-Daten (Tage)</label><input id="gen-days" type="number" value="1500" min="200" max="6000"></div>
+      <div class="field"><label>Zufalls-Seed</label><input id="gen-seed" type="number" value="42"></div>
+      <button id="btn-generate">Demo-Daten erzeugen</button>
+      <div class="field" style="margin-left:auto"><label>Echte Kurse (Stooq-Symbol)</label><input id="fetch-symbol" placeholder="z. B. aapl.us, sap.de"></div>
+      <button id="btn-fetch" class="ghost">Laden</button>
+      <label class="field" style="cursor:pointer"><span class="muted" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.4px">Eigene CSV</span>
+        <input id="file-input" type="file" accept=".csv" style="padding:6px"></label>
+    </div>
+    <div id="data-status"></div>
+    <canvas id="price-chart" width="1000" height="220" style="margin-top:14px; display:none"></canvas>
+  </section>
+
+  <div class="tabs">
+    <button data-tab="backtest" class="active">Backtest</button>
+    <button data-tab="optimize">Optimieren</button>
+    <button data-tab="walkforward">Walk-Forward (Zukunft)</button>
+  </div>
+
+  <!-- BACKTEST -->
+  <section class="tab active panel" id="tab-backtest">
+    <h2>2 · Backtest</h2>
+    <p class="hint">Eine Strategie auf den geladenen Daten testen und mit „Kaufen &amp; Halten" vergleichen.</p>
+    <div class="row">
+      <div class="field"><label>Strategie</label><select id="bt-strategy"></select></div>
+      <div id="bt-params" class="row"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Startkapital</label><input id="bt-capital" type="number" value="10000"></div>
+      <div class="field"><label>Gebühr</label><input id="bt-commission" type="number" step="0.0001" value="0.001"></div>
+      <div class="field"><label>Slippage</label><input id="bt-slippage" type="number" step="0.0001" value="0.0005"></div>
+      <button id="btn-backtest">Backtest starten</button>
+    </div>
+    <div id="bt-status"></div>
+    <div id="bt-result" style="display:none">
+      <canvas id="equity-chart" width="1000" height="300"></canvas>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--accent)"></i> Strategie</span>
+        <span><i class="swatch" style="background:#8a97b0"></i> Kaufen &amp; Halten</span>
+      </div>
+      <canvas id="dd-chart" width="1000" height="180" style="margin-top:14px"></canvas>
+      <div class="legend"><span><i class="swatch" style="background:var(--danger)"></i> Drawdown (Rückgang vom Hoch, %)</span></div>
+      <h3 style="margin:20px 0 4px">Kennzahlen</h3>
+      <div id="bt-metrics" class="metrics"></div>
+      <h3 style="margin:22px 0 4px">Letzte Trades</h3>
+      <div class="scroll"><table id="bt-trades"></table></div>
+    </div>
+  </section>
+
+  <!-- OPTIMIZE -->
+  <section class="tab panel" id="tab-optimize">
+    <h2>3 · Parameter optimieren</h2>
+    <p class="hint">Mehrere Parameterwerte durchprobieren (mit <b>|</b> trennen, z. B. <code>10|20|30</code>) und nach Kennzahl sortieren.</p>
+    <div class="row">
+      <div class="field"><label>Strategie</label><select id="opt-strategy"></select></div>
+      <div id="opt-params" class="grid-inputs"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Sortieren nach</label>
+        <select id="opt-metric"><option value="sharpe">Sharpe</option><option value="cagr">CAGR</option><option value="max_drawdown">Max Drawdown</option></select></div>
+      <button id="btn-optimize">Optimierung starten</button>
+    </div>
+    <div id="opt-status"></div>
+    <div id="opt-result" style="display:none">
+      <div id="opt-best" class="status info"></div>
+      <div class="scroll" style="margin-top:12px"><table id="opt-table"></table></div>
+      <p class="note">⚠️ Dies ist ein <b>In-Sample</b>-Ergebnis: Auf denselben Daten optimierte Parameter sehen fast immer zu gut aus. Prüfe die Sieger im Reiter <b>Walk-Forward</b>.</p>
+    </div>
+  </section>
+
+  <!-- WALKFORWARD -->
+  <section class="tab panel" id="tab-walkforward">
+    <h2>4 · Walk-Forward-Analyse — funktioniert es auch in Zukunft?</h2>
+    <p class="hint">Parameter werden nur auf vergangenen Daten optimiert und dann auf dem <b>folgenden, ungesehenen</b> Zeitraum getestet. So sieht man, ob eine Strategie überangepasst ist.</p>
+    <div class="row">
+      <div class="field"><label>Strategie</label><select id="wf-strategy"></select></div>
+      <div id="wf-params" class="grid-inputs"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Trainingsfenster (Tage)</label><input id="wf-train" type="number" value="500"></div>
+      <div class="field"><label>Testfenster (Tage)</label><input id="wf-test" type="number" value="125"></div>
+      <button id="btn-walkforward">Walk-Forward starten</button>
+    </div>
+    <div id="wf-status"></div>
+    <div id="wf-result" style="display:none">
+      <div id="wf-summary" class="metrics"></div>
+      <canvas id="wf-chart" width="1000" height="260" style="margin-top:14px"></canvas>
+      <div class="legend"><span><i class="swatch" style="background:var(--warn)"></i> Verkettetes Out-of-Sample-Ergebnis</span></div>
+      <h3 style="margin:20px 0 4px">Fenster</h3>
+      <div class="scroll"><table id="wf-table"></table></div>
+    </div>
+  </section>
+
+  <p class="note">StrategyLab dient der Analyse und Ausbildung und ist keine Anlageberatung. Backtest-Ergebnisse — auch walk-forward-validierte — garantieren keine zukünftigen Renditen.</p>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let STRATEGIES = [];
+
+async function api(path, body) {
+  const opts = body === undefined
+    ? {} : { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) };
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Unbekannter Fehler");
+  return data;
+}
+function setStatus(el, msg, kind) {
+  el.innerHTML = msg ? `<div class="status ${kind}">${msg}</div>` : "";
+}
+function busy(btn, on, label) {
+  btn.disabled = on;
+  if (on) { btn.dataset.label = btn.textContent; btn.innerHTML = `<span class="spinner"></span> ${label||"…"}`; }
+  else if (btn.dataset.label) { btn.textContent = btn.dataset.label; }
+}
+const fmtPct = (v) => v==null ? "–" : (v*100).toFixed(2)+"%";
+const fmtNum = (v) => v==null ? "∞" : Number(v).toFixed(2);
+const cls = (v) => v==null ? "" : (v>=0 ? "pos" : "neg");
+
+// ---- Strategie-Parameterfelder generisch aufbauen ----
+function paramFields(strategyName, container, gridMode) {
+  const strat = STRATEGIES.find(s => s.name === strategyName);
+  container.innerHTML = "";
+  if (!strat) return;
+  strat.params.forEach(p => {
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    const label = document.createElement("label");
+    label.textContent = p.name + (gridMode ? " (Werte mit |)" : "");
+    let input;
+    if (p.type === "bool" && !gridMode) {
+      input = document.createElement("select");
+      input.innerHTML = `<option value="false">nein</option><option value="true">ja</option>`;
+      input.value = String(p.default);
+    } else {
+      input = document.createElement("input");
+      input.value = gridMode ? String(p.default) : String(p.default);
+      if (p.type !== "bool" && !gridMode) input.type = "number";
+      if (p.type === "float") input.step = "0.01";
+    }
+    input.dataset.pname = p.name;
+    input.dataset.ptype = p.type;
+    wrap.appendChild(label); wrap.appendChild(input);
+    container.appendChild(wrap);
+  });
+}
+function collectParams(container) {
+  const params = {};
+  container.querySelectorAll("[data-pname]").forEach(el => {
+    const t = el.dataset.ptype, raw = el.value.trim();
+    if (raw === "") return;
+    if (t === "bool") params[el.dataset.pname] = (el.value === "true");
+    else if (t === "int") params[el.dataset.pname] = parseInt(raw, 10);
+    else if (t === "float") params[el.dataset.pname] = parseFloat(raw);
+    else params[el.dataset.pname] = raw;
+  });
+  return params;
+}
+function collectGrid(container) {
+  const grid = {};
+  container.querySelectorAll("[data-pname]").forEach(el => {
+    const t = el.dataset.ptype, raw = el.value.trim();
+    if (raw === "") return;
+    const vals = raw.split("|").map(x => x.trim()).filter(Boolean).map(x => {
+      if (t === "int") return parseInt(x, 10);
+      if (t === "float") return parseFloat(x);
+      if (t === "bool") return x === "true";
+      return x;
+    });
+    if (vals.length) grid[el.dataset.pname] = vals;
+  });
+  return grid;
+}
+
+// ---- Canvas-Liniendiagramm ----
+function drawChart(canvas, series, opts) {
+  opts = opts || {};
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const padL = 62, padR = 16, padT = 14, padB = 28;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  let all = [];
+  series.forEach(s => s.values.forEach(v => { if (v!=null) all.push(v); }));
+  if (opts.baseline0) all.push(0);
+  if (!all.length) return;
+  let min = Math.min(...all), max = Math.max(...all);
+  if (min===max) { max=min+1; }
+  const span = (max-min)||1; min -= span*0.05; max += span*0.05;
+  const n = series[0].values.length;
+  const X = (i) => padL + (i/Math.max(n-1,1))*plotW;
+  const Y = (v) => padT + (1-(v-min)/(max-min))*plotH;
+
+  ctx.strokeStyle = "#2e3a52"; ctx.fillStyle = "#93a1bd";
+  ctx.font = "11px sans-serif"; ctx.lineWidth = 1;
+  for (let k=0;k<=4;k++){
+    const val = min + (k/4)*(max-min), y = Y(val);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
+    ctx.textAlign="right"; ctx.fillText(opts.pct ? (val).toFixed(0)+"%" : val.toFixed(0), padL-6, y+4);
+  }
+  const dates = opts.dates||[];
+  ctx.textAlign="center";
+  for (let k=0;k<=4;k++){
+    const i = Math.round((k/4)*(n-1));
+    if (dates[i]) ctx.fillText(dates[i], X(i), H-8);
+  }
+  series.forEach(s => {
+    if (s.fill) {
+      ctx.beginPath(); const base = Y(Math.min(0,max));
+      ctx.moveTo(X(0), base);
+      s.values.forEach((v,i)=>{ if(v!=null) ctx.lineTo(X(i), Y(v)); });
+      ctx.lineTo(X(n-1), base); ctx.closePath();
+      ctx.fillStyle = s.color+"33"; ctx.fill();
+    }
+    ctx.beginPath(); ctx.strokeStyle = s.color; ctx.lineWidth = s.width||2;
+    let started=false;
+    s.values.forEach((v,i)=>{ if(v==null){started=false;return;}
+      if(!started){ctx.moveTo(X(i),Y(v));started=true;} else ctx.lineTo(X(i),Y(v)); });
+    ctx.stroke();
+  });
+}
+
+// ---- Daten laden ----
+async function afterData(info) {
+  if (!info.loaded) return;
+  setStatus($("#data-status"),
+    `✓ ${info.source} · ${info.rows} Handelstage · ${info.start} bis ${info.end}`, "ok");
+  const c = $("#price-chart"); c.style.display = "block";
+  drawChart(c, [{values: info.preview.close, color:"#4f8cff", width:1.6}], {dates: info.preview.dates});
+}
+$("#btn-generate").onclick = async (e) => {
+  busy(e.target, true, "Erzeuge…");
+  try { afterData(await api("/api/generate", {days:+$("#gen-days").value, seed:+$("#gen-seed").value})); }
+  catch(err){ setStatus($("#data-status"), err.message, "err"); }
+  finally { busy(e.target, false); }
+};
+$("#btn-fetch").onclick = async (e) => {
+  busy(e.target, true, "Lade…");
+  try { afterData(await api("/api/fetch", {symbol:$("#fetch-symbol").value})); }
+  catch(err){ setStatus($("#data-status"), err.message + " (Stooq ist evtl. nicht erreichbar — nutze Demo-Daten oder CSV.)", "err"); }
+  finally { busy(e.target, false); }
+};
+$("#file-input").onchange = async (e) => {
+  const file = e.target.files[0]; if(!file) return;
+  const content = await file.text();
+  try { afterData(await api("/api/upload", {filename:file.name, content})); }
+  catch(err){ setStatus($("#data-status"), err.message, "err"); }
+};
+
+// ---- Tabs ----
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); $("#tab-"+b.dataset.tab).classList.add("active");
+});
+
+// ---- Backtest ----
+$("#btn-backtest").onclick = async (e) => {
+  busy(e.target, true, "Rechne…"); setStatus($("#bt-status"), "", "");
+  try {
+    const data = await api("/api/backtest", {
+      strategy: $("#bt-strategy").value, params: collectParams($("#bt-params")),
+      capital:+$("#bt-capital").value, commission:+$("#bt-commission").value, slippage:+$("#bt-slippage").value,
+    });
+    renderBacktest(data);
+    $("#bt-result").style.display = "block";
+  } catch(err){ setStatus($("#bt-status"), err.message, "err"); $("#bt-result").style.display="none"; }
+  finally { busy(e.target, false); }
+};
+function renderBacktest(d) {
+  const eq = d.equity_chart, dd = d.drawdown_chart;
+  drawChart($("#equity-chart"),
+    [{values:eq.equity,color:"#4f8cff",width:2},{values:eq.benchmark,color:"#8a97b0",width:1.6}],
+    {dates:eq.dates});
+  drawChart($("#dd-chart"), [{values:dd.drawdown,color:"#ff5c6c",width:1.6,fill:true}],
+    {dates:dd.dates, pct:true, baseline0:true});
+  const s = d.stats;
+  const M = [
+    ["Gesamtrendite", fmtPct(s.total_return), cls(s.total_return)],
+    ["Kaufen & Halten", fmtPct(s.benchmark_return), cls(s.benchmark_return)],
+    ["CAGR (p.a.)", fmtPct(s.cagr), cls(s.cagr)],
+    ["Sharpe Ratio", fmtNum(s.sharpe), cls(s.sharpe)],
+    ["Sortino Ratio", fmtNum(s.sortino), cls(s.sortino)],
+    ["Max Drawdown", fmtPct(s.max_drawdown), "neg"],
+    ["Volatilität p.a.", fmtPct(s.annual_volatility), ""],
+    ["Calmar Ratio", fmtNum(s.calmar), cls(s.calmar)],
+    ["Marktexposition", fmtPct(s.exposure), ""],
+    ["Trades", s.num_trades, ""],
+    ["Trefferquote", fmtPct(s.win_rate), ""],
+    ["Ø Trade-Rendite", fmtPct(s.avg_trade_return), cls(s.avg_trade_return)],
+    ["Profit-Faktor", fmtNum(s.profit_factor), cls((s.profit_factor||0)-1)],
+    ["Ø Haltedauer", fmtNum(s.avg_holding_days)+" T", ""],
+  ];
+  $("#bt-metrics").innerHTML = M.map(([k,v,c]) =>
+    `<div class="metric"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join("");
+  const rows = d.trades.map(t =>
+    `<tr><td>${t.entry_date}</td><td>${t.exit_date}</td><td>${t.side}</td>
+     <td>${t.entry_price}</td><td>${t.exit_price}</td>
+     <td class="${t.ret>=0?'pos':'neg'}">${t.ret.toFixed(2)}%</td><td>${t.holding_days}</td></tr>`).join("");
+  $("#bt-trades").innerHTML = rows
+    ? `<thead><tr><th>Einstieg</th><th>Ausstieg</th><th>Richtung</th><th>Einstiegskurs</th><th>Ausstiegskurs</th><th>Rendite</th><th>Tage</th></tr></thead><tbody>${rows}</tbody>`
+    : `<tbody><tr><td class="muted">Keine abgeschlossenen Trades.</td></tr></tbody>`;
+}
+
+// ---- Optimize ----
+$("#btn-optimize").onclick = async (e) => {
+  busy(e.target, true, "Optimiere…"); setStatus($("#opt-status"), "", "");
+  try {
+    const grid = collectGrid($("#opt-params"));
+    if (!Object.keys(grid).length) throw new Error("Bitte mindestens einen Parameter mit Werten angeben.");
+    const d = await api("/api/optimize", {strategy:$("#opt-strategy").value, grid, metric:$("#opt-metric").value,
+      capital:+$("#bt-capital").value, commission:+$("#bt-commission").value, slippage:+$("#bt-slippage").value});
+    $("#opt-best").textContent = "Beste Parameter: " + JSON.stringify(d.best_params);
+    const head = d.columns.map(c=>`<th>${c}</th>`).join("");
+    const body = d.ranking.slice(0,25).map(r =>
+      `<tr>${d.columns.map(c=>`<td>${r[c]==null?"–":r[c]}</td>`).join("")}</tr>`).join("");
+    $("#opt-table").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+    $("#opt-result").style.display = "block";
+  } catch(err){ setStatus($("#opt-status"), err.message, "err"); $("#opt-result").style.display="none"; }
+  finally { busy(e.target, false); }
+};
+
+// ---- Walk-Forward ----
+$("#btn-walkforward").onclick = async (e) => {
+  busy(e.target, true, "Analysiere…"); setStatus($("#wf-status"), "", "");
+  try {
+    const grid = collectGrid($("#wf-params"));
+    if (!Object.keys(grid).length) throw new Error("Bitte mindestens einen Parameter mit Werten angeben.");
+    const d = await api("/api/walkforward", {strategy:$("#wf-strategy").value, grid,
+      train:+$("#wf-train").value, test:+$("#wf-test").value,
+      capital:+$("#bt-capital").value, commission:+$("#bt-commission").value, slippage:+$("#bt-slippage").value});
+    renderWalkforward(d);
+    $("#wf-result").style.display = "block";
+  } catch(err){ setStatus($("#wf-status"), err.message, "err"); $("#wf-result").style.display="none"; }
+  finally { busy(e.target, false); }
+};
+function renderWalkforward(d) {
+  const s = d.oos_stats;
+  const M = [
+    ["OOS Gesamtrendite", fmtPct(s.total_return), cls(s.total_return)],
+    ["OOS CAGR", fmtPct(s.cagr), cls(s.cagr)],
+    ["OOS Sharpe", fmtNum(s.sharpe), cls(s.sharpe)],
+    ["OOS Max Drawdown", fmtPct(s.max_drawdown), "neg"],
+    ["Positive Fenster", `${d.positive_windows}/${d.total_windows}`, d.positive_windows*2>=d.total_windows?"pos":"neg"],
+  ];
+  $("#wf-summary").innerHTML = M.map(([k,v,c]) =>
+    `<div class="metric"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join("");
+  drawChart($("#wf-chart"), [{values:d.oos_equity_chart.equity,color:"#ffb648",width:2}],
+    {dates:d.oos_equity_chart.dates});
+  const head = d.columns.map(c=>`<th>${c}</th>`).join("");
+  const body = d.windows.map(r =>
+    `<tr>${d.columns.map(c=>{
+      let v = r[c]; if(c==="oos_return" && v!=null) return `<td class="${v>=0?'pos':'neg'}">${(v*100).toFixed(2)}%</td>`;
+      return `<td>${v==null?"–":v}</td>`;}).join("")}</tr>`).join("");
+  $("#wf-table").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+}
+
+// ---- Init ----
+(async () => {
+  const d = await api("/api/strategies");
+  STRATEGIES = d.strategies;
+  ["#bt-strategy","#opt-strategy","#wf-strategy"].forEach(sel => {
+    $(sel).innerHTML = STRATEGIES.map(s=>`<option value="${s.name}">${s.name}</option>`).join("");
+  });
+  const sync = (sel, cont, grid) => { const el=$(sel); paramFields(el.value, $(cont), grid);
+    el.onchange = () => paramFields(el.value, $(cont), grid); };
+  sync("#bt-strategy", "#bt-params", false);
+  sync("#opt-strategy", "#opt-params", true);
+  sync("#wf-strategy", "#wf-params", true);
+  // Startzustand des Datensatzes abfragen (falls schon vorhanden)
+  try { afterData(await api("/api/dataset", {})); } catch(_) {}
+})();
+</script>
+</body>
+</html>

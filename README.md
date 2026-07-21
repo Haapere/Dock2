@@ -10,7 +10,17 @@ pip install -e ".[dev]"
 
 Benötigt Python ≥ 3.10, `pandas` und `numpy`. Keine weiteren Abhängigkeiten — auch die HTML-Reports kommen ohne Plot-Bibliothek aus.
 
-## Schnellstart
+## Grafische Oberfläche (empfohlen für den Einstieg)
+
+Wer nicht mit der Kommandozeile arbeiten möchte, startet einfach die Web-Oberfläche — sie öffnet sich automatisch im Browser:
+
+```bash
+strategylab gui
+```
+
+Dort lässt sich alles per Mausklick erledigen: Kursdaten laden (Demo, Stooq oder eigene CSV), Backtests mit Equity- und Drawdown-Diagramm, Parameter-Optimierung und Walk-Forward-Analyse. Kein weiterer Befehl nötig. Zum Beenden im Terminal `Strg+C` drücken.
+
+## Schnellstart (Kommandozeile)
 
 ```bash
 # 1. Daten besorgen: synthetische Demo-Daten ...

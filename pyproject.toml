@@ -21,3 +21,6 @@ strategylab = "strategylab.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["strategylab*"]
+
+[tool.setuptools.package-data]
+strategylab = ["web/*.html"]
