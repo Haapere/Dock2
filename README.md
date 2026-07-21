@@ -10,9 +10,23 @@ pip install -e ".[dev]"
 
 Benötigt Python ≥ 3.10, `pandas` und `numpy`. Keine weiteren Abhängigkeiten — auch die HTML-Reports kommen ohne Plot-Bibliothek aus.
 
-## Grafische Oberfläche (empfohlen für den Einstieg)
+## Ganz ohne Terminal: einfach doppelklicken
 
-Wer nicht mit der Kommandozeile arbeiten möchte, startet einfach die Web-Oberfläche — sie öffnet sich automatisch im Browser:
+Für den bequemsten Einstieg liegt für jedes System ein Start-Skript bei. Beim **ersten** Doppelklick richtet es sich selbst ein (eigene Umgebung im Projektordner, dauert ein bis zwei Minuten), danach öffnet sich die Oberfläche jedes Mal direkt im Browser:
+
+| System  | Datei                | Hinweis |
+|---------|----------------------|---------|
+| Windows | `start-windows.bat`  | Doppelklick genügt |
+| macOS   | `start-mac.command`  | Doppelklick; beim allerersten Mal ggf. Rechtsklick → „Öffnen" (Gatekeeper) |
+| Linux   | `start-linux.sh`     | einmalig `chmod +x start-linux.sh`, dann ausführen |
+
+Voraussetzung ist nur eine installierte **Python-3**-Version (von [python.org](https://www.python.org/downloads/) — unter Windows im Installer „Add Python to PATH" ankreuzen). Fehlt Python, sagt dir das Skript beim Start Bescheid.
+
+Das Terminal-Fenster, das dabei aufgeht, bitte geöffnet lassen, solange du das Programm nutzt — zum Beenden `Strg+C` drücken oder das Fenster schließen.
+
+## Grafische Oberfläche
+
+Wenn StrategyLab bereits installiert ist, startet die Web-Oberfläche auch direkt:
 
 ```bash
 strategylab gui
