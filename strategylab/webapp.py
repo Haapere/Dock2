@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import json
+import socket
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -282,8 +283,29 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": f"Unerwarteter Fehler: {exc}"}, status=500)
 
 
+def _lan_ip() -> str | None:
+    """Ermittelt die IP-Adresse im lokalen Netz (für den Zugriff vom Handy)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # Verbindet nichts wirklich, verrät aber die eigene LAN-Adresse.
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except OSError:
+        pass
+    return None
+
+
 def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
-    """Startet den Webserver und öffnet optional den Browser."""
+    """Startet den Webserver und öffnet optional den Browser.
+
+    host="0.0.0.0" macht die Oberfläche auch für andere Geräte im selben
+    WLAN erreichbar (z. B. Handy/Tablet).
+    """
     server = None
     for candidate in range(port, port + 20):
         try:
@@ -295,11 +317,21 @@ def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) 
     if server is None:
         raise RuntimeError(f"Kein freier Port im Bereich {port}-{port + 20} gefunden")
 
-    url = f"http://{host}:{port}/"
-    print(f"StrategyLab-Oberfläche läuft auf {url}")
-    print("Zum Beenden Strg+C drücken.")
+    local_url = f"http://127.0.0.1:{port}/"
+    lan_exposed = host not in ("127.0.0.1", "localhost")
+    print(f"StrategyLab-Oberfläche läuft auf {local_url}")
+    if lan_exposed:
+        ip = _lan_ip()
+        if ip:
+            print("\n  Auf dem Handy/Tablet im selben WLAN diese Adresse im Browser öffnen:")
+            print(f"      http://{ip}:{port}/\n")
+        else:
+            print("  (LAN-Adresse konnte nicht ermittelt werden — bitte die IP des Rechners verwenden.)")
+        print("  Hinweis: Im Handy-Modus ist die Oberfläche für alle Geräte im")
+        print("  Netzwerk erreichbar. Nur in vertrauenswürdigen WLANs verwenden.")
+    print("\nZum Beenden Strg+C drücken.")
     if open_browser:
-        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.6, lambda: webbrowser.open(local_url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

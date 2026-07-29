@@ -85,6 +85,31 @@ def test_clean_handles_inf_and_nan():
     assert webapp._clean(1.23456789) == pytest.approx(1.234568)
 
 
+def test_lan_ip_returns_none_or_valid_address():
+    ip = webapp._lan_ip()
+    if ip is not None:
+        assert not ip.startswith("127.")
+        assert ip.count(".") == 3
+
+
+def test_gui_host_resolution():
+    from strategylab.cli import build_parser
+
+    parser = build_parser()
+    # Standard: nur lokal
+    args = parser.parse_args(["gui"])
+    host = args.host or ("0.0.0.0" if args.lan else "127.0.0.1")
+    assert host == "127.0.0.1"
+    # Handy-Modus: im Netz erreichbar
+    args = parser.parse_args(["gui", "--lan"])
+    host = args.host or ("0.0.0.0" if args.lan else "127.0.0.1")
+    assert host == "0.0.0.0"
+    # Manueller Host überschreibt --lan
+    args = parser.parse_args(["gui", "--lan", "--host", "127.0.0.1"])
+    host = args.host or ("0.0.0.0" if args.lan else "127.0.0.1")
+    assert host == "127.0.0.1"
+
+
 def test_downsample_keeps_last_point():
     import pandas as pd
 

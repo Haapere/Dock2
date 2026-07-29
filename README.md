@@ -34,6 +34,18 @@ strategylab gui
 
 Dort lässt sich alles per Mausklick erledigen: Kursdaten laden (Demo, Stooq oder eigene CSV), Backtests mit Equity- und Drawdown-Diagramm, Parameter-Optimierung und Walk-Forward-Analyse. Kein weiterer Befehl nötig. Zum Beenden im Terminal `Strg+C` drücken.
 
+### Auf dem Handy oder Tablet nutzen
+
+Python läuft nicht sinnvoll direkt auf dem Handy. Stattdessen startest du das Programm auf deinem Computer im **Handy-Modus** und öffnest die Oberfläche auf dem Handy im Browser — beide Geräte im selben WLAN:
+
+```bash
+strategylab gui --lan
+```
+
+Beim Start wird eine Adresse wie `http://192.168.1.42:8765/` angezeigt. Diese gibst du auf dem Handy im Browser ein (oder legst sie als Lesezeichen/Startbildschirm-Symbol an) — fertig. Die Oberfläche ist responsiv und passt sich dem Handybildschirm an.
+
+> Hinweis: Im Handy-Modus ist die Oberfläche für alle Geräte im selben Netzwerk erreichbar. Nutze ihn nur in vertrauenswürdigen WLANs (zu Hause), nicht in offenen öffentlichen Netzen.
+
 ## Schnellstart (Kommandozeile)
 
 ```bash

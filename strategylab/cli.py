@@ -61,6 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_gui = sub.add_parser("gui", help="Grafische Web-Oberfläche im Browser öffnen")
     p_gui.add_argument("--port", type=int, default=8765, help="Port (Default: 8765)")
     p_gui.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch öffnen")
+    p_gui.add_argument(
+        "--lan", action="store_true",
+        help="Handy-Modus: auch für Geräte im selben WLAN erreichbar (Adresse wird angezeigt)",
+    )
+    p_gui.add_argument("--host", help="Bind-Adresse manuell setzen (überschreibt --lan)")
 
     # list
     sub.add_parser("list", help="Verfügbare Strategien anzeigen")
@@ -130,7 +135,8 @@ def cmd_data(args: argparse.Namespace) -> int:
 def cmd_gui(args: argparse.Namespace) -> int:
     from strategylab import webapp
 
-    webapp.serve(port=args.port, open_browser=not args.no_browser)
+    host = args.host or ("0.0.0.0" if args.lan else "127.0.0.1")
+    webapp.serve(host=host, port=args.port, open_browser=not args.no_browser)
     return 0
 
 
