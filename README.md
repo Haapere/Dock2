@@ -1,3 +1,16 @@
+# Dock2
+
+Dieses Repository enthält zwei voneinander unabhängige lokale Werkzeuge:
+
+| Werkzeug | Zweck | Doku |
+|----------|-------|------|
+| **StrategyLab** | Trading-Strategien entwickeln, backtesten und forward-testen | dieses Dokument |
+| **CreatorDock** | Projektzentrale für das Content-Creator-Projekt: Partnerinnen-Onboarding mit Freigabelogik, Drehplanung, Content-Kalender, Buchhaltung | [CREATORDOCK.md](CREATORDOCK.md) |
+
+Beide starten per Doppelklick und laufen ausschließlich auf dem eigenen Rechner.
+
+---
+
 # StrategyLab
 
 Ein Python-Werkzeug, um Trading-Strategien zu **entwickeln**, auf historischen Daten zu **backtesten** und ihre **Zukunftstauglichkeit zu prüfen** (Walk-Forward-Analyse und Papertrading/Forward-Test).

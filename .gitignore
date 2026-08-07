@@ -8,3 +8,12 @@ data/
 report*.html
 paper*.json
 .venv/
+
+# CreatorDock: personenbezogene Daten duerfen niemals ins Repository.
+# Der Standard-Datenordner liegt ausserhalb (~/CreatorDock-Daten); diese
+# Eintraege sichern zusaetzlich gegen einen abweichend gesetzten Pfad ab.
+CreatorDock-Daten/
+creator-daten/
+daten.json
+daten.json.bak
+statusbericht.html

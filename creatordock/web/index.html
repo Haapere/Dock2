@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>CreatorDock</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f6f7f9; --flaeche:#fff; --rand:#dfe3e9; --text:#171a1f; --leise:#6b7280;
+  --akzent:#7c4dff; --ok:#1a7f47; --warn:#b9711c; --krit:#c0392b; --radius:.6rem;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#131519; --flaeche:#1b1e24; --rand:#2b3038; --text:#e7e9ee; --leise:#96a0ae; --akzent:#a385ff; }
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+     background:var(--bg);color:var(--text);line-height:1.5}
+header{background:var(--flaeche);border-bottom:1px solid var(--rand);padding:.85rem 1.1rem;
+       position:sticky;top:0;z-index:20}
+.kopf{display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap;max-width:76rem;margin:0 auto}
+.kopf h1{font-size:1.1rem;margin:0;letter-spacing:-.01em}
+.kopf .sub{color:var(--leise);font-size:.8rem}
+nav{max-width:76rem;margin:.6rem auto 0;display:flex;gap:.25rem;overflow-x:auto;padding-bottom:.1rem}
+nav button{background:none;border:0;border-radius:.4rem;padding:.4rem .7rem;cursor:pointer;
+           color:var(--leise);font-size:.88rem;white-space:nowrap;font-weight:500}
+nav button:hover{background:var(--bg);color:var(--text)}
+nav button.aktiv{background:var(--akzent);color:#fff}
+main{max-width:76rem;margin:0 auto;padding:1.1rem}
+section{display:none} section.aktiv{display:block}
+.karte{background:var(--flaeche);border:1px solid var(--rand);border-radius:var(--radius);
+       padding:1rem;margin-bottom:1rem}
+.karte h2{margin:0 0 .7rem;font-size:1rem}
+.karte h3{margin:1.1rem 0 .5rem;font-size:.9rem;color:var(--leise);text-transform:uppercase;
+          letter-spacing:.04em}
+.kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.6rem}
+.kachel{background:var(--flaeche);border:1px solid var(--rand);border-radius:var(--radius);padding:.7rem .8rem}
+.kachel .label{font-size:.72rem;color:var(--leise);text-transform:uppercase;letter-spacing:.04em}
+.kachel .wert{font-size:1.3rem;font-weight:650;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:.86rem}
+th,td{text-align:left;padding:.45rem .5rem;border-bottom:1px solid var(--rand);vertical-align:top}
+th{color:var(--leise);font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.03em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.tabellenrahmen{overflow-x:auto}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{background:var(--bg);border:1px solid var(--rand);border-radius:.4rem;
+                      padding:.4rem .55rem;width:100%}
+textarea{min-height:4rem;resize:vertical}
+label{display:block;font-size:.76rem;color:var(--leise);margin-bottom:.2rem}
+.feldreihe{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.6rem;
+           align-items:end;margin-bottom:.7rem}
+.knopf{background:var(--akzent);color:#fff;border:0;border-radius:.4rem;padding:.45rem .9rem;
+       cursor:pointer;font-weight:550;font-size:.86rem;width:auto}
+.knopf:hover{filter:brightness(1.08)} .knopf:disabled{opacity:.5;cursor:not-allowed}
+.knopf.leise{background:var(--bg);color:var(--text);border:1px solid var(--rand)}
+.knopf.gefahr{background:var(--krit)}
+.knopf.klein{padding:.2rem .5rem;font-size:.78rem}
+.pill{display:inline-block;padding:.1rem .45rem;border-radius:999px;font-size:.74rem;
+      border:1px solid var(--rand);white-space:nowrap}
+.pill.ok{border-color:var(--ok);color:var(--ok)}
+.pill.warn{border-color:var(--warn);color:var(--warn)}
+.pill.krit{border-color:var(--krit);color:var(--krit)}
+.meldung{border-left:3px solid var(--leise);padding:.5rem .7rem;border-radius:.35rem;
+         margin-bottom:.4rem;font-size:.86rem;background:var(--flaeche)}
+.meldung.kritisch{border-color:var(--krit)}
+.meldung.warnung{border-color:var(--warn)}
+.meldung b{margin-right:.35rem}
+.hinweisbox{background:var(--bg);border:1px dashed var(--rand);border-radius:.45rem;
+            padding:.6rem .75rem;font-size:.83rem;color:var(--leise);margin-bottom:.8rem}
+.gateliste{display:grid;gap:.3rem;margin:.4rem 0}
+.gate{display:flex;align-items:center;gap:.5rem;font-size:.85rem}
+.gate input{width:auto}
+.gate .erkl{color:var(--leise);font-size:.76rem}
+.balken{height:.4rem;background:var(--bg);border-radius:999px;overflow:hidden;margin-top:.3rem}
+.balken > div{height:100%;background:var(--ok)}
+#fehler{position:fixed;left:50%;transform:translateX(-50%);bottom:1.2rem;z-index:50;
+        background:var(--krit);color:#fff;padding:.6rem 1rem;border-radius:.45rem;
+        font-size:.87rem;max-width:44rem;display:none;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+pre{background:var(--bg);border:1px solid var(--rand);border-radius:.45rem;padding:.8rem;
+    overflow-x:auto;font-size:.8rem;white-space:pre-wrap;max-height:32rem}
+details summary{cursor:pointer;font-size:.85rem;color:var(--leise)}
+.leer{color:var(--leise);font-size:.87rem;padding:.6rem 0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kopf">
+    <h1>CreatorDock</h1>
+    <span class="sub" id="kopfSub">wird geladen …</span>
+  </div>
+  <nav id="nav"></nav>
+</header>
+
+<main>
+  <section id="tab-uebersicht" class="aktiv">
+    <div class="kacheln" id="kacheln"></div>
+    <div class="karte">
+      <h2>Offene Risiken</h2>
+      <div id="warnungen"></div>
+    </div>
+    <div class="karte">
+      <h2>Nächste Veröffentlichungen</h2>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Termin</th><th>Typ</th><th>Kanal</th><th>Thema</th><th>Status</th>
+      </tr></thead><tbody id="naechsteSlots"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="tab-partnerinnen">
+    <div class="karte">
+      <h2>Neue Partnerin erfassen</h2>
+      <div class="hinweisbox" id="ablageHinweis"></div>
+      <div class="feldreihe">
+        <div><label>Pseudonym (kein Klarname)</label><input id="pPseudonym" placeholder="z. B. Model_A"></div>
+        <div><label>Quelle des Kontakts</label><input id="pQuelle" placeholder="z. B. Anzeige ModelMayhem"></div>
+        <div><label>Aktenzeichen der Ablage</label><input id="pAkte" placeholder="z. B. 2026-001"></div>
+        <div><button class="knopf" onclick="partnerinAnlegen()">Anlegen</button></div>
+      </div>
+    </div>
+    <div id="partnerListe"></div>
+  </section>
+
+  <section id="tab-drehs">
+    <div class="karte">
+      <h2>Dreh planen</h2>
+      <div class="feldreihe">
+        <div><label>Datum</label><input type="date" id="dDatum"></div>
+        <div><label>Titel</label><input id="dTitel" placeholder="Arbeitstitel"></div>
+        <div><label>Partnerinnen (leer = solo)</label><select id="dPartner" multiple size="3"></select></div>
+        <div><label>Plattformen</label><select id="dPlattformen" multiple size="3"></select></div>
+        <div><button class="knopf" onclick="drehAnlegen()">Planen</button></div>
+      </div>
+      <div class="hinweisbox">Ein Dreh lässt sich erst über „geplant" hinausschieben, wenn alle
+        beteiligten Partnerinnen freigegeben sind. Nach einem Widerruf wird er gesperrt.</div>
+    </div>
+    <div class="karte">
+      <h2>Drehs</h2>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Datum</th><th>Titel</th><th>Partnerinnen</th><th>Plattformen</th>
+        <th>Status</th><th>Freigabe</th><th></th>
+      </tr></thead><tbody id="drehListe"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="tab-kalender">
+    <div class="karte">
+      <h2>Rhythmus planen</h2>
+      <div class="feldreihe">
+        <div><label>Start</label><input type="date" id="kStart"></div>
+        <div><label>Wochen</label><input type="number" id="kWochen" value="6" min="1" max="52"></div>
+        <div><label><input type="checkbox" id="kErsetzen" style="width:auto"> vorhandene ersetzen</label></div>
+        <div><button class="knopf" onclick="kalenderPlanen()">Kalender füllen</button></div>
+      </div>
+      <div class="hinweisbox">Standard laut Konzept: Teaser Mo/Mi/Fr auf X/Twitter,
+        Paid-Release sonntags auf OnlyFans. Themen sind Vorschläge und überschreibbar.</div>
+    </div>
+    <div class="karte">
+      <h2>Redaktionsplan</h2>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Termin</th><th>Typ</th><th>Kanal</th><th>Thema</th><th>Status</th>
+      </tr></thead><tbody id="kalenderListe"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="tab-finanzen">
+    <div class="karte">
+      <h2>Buchung erfassen</h2>
+      <div class="feldreihe">
+        <div><label>Datum</label><input type="date" id="bDatum"></div>
+        <div><label>Beschreibung</label><input id="bText" placeholder="z. B. OnlyFans Payout Juli"></div>
+        <div><label>Kategorie</label><select id="bKategorie"></select></div>
+        <div><label>Betrag (EUR)</label><input type="number" id="bBetrag" step="0.01" min="0"></div>
+        <div><label>Beleg-Nr.</label><input id="bBeleg" placeholder="optional"></div>
+        <div><button class="knopf" onclick="buchen()">Buchen</button></div>
+      </div>
+    </div>
+    <div class="kacheln" id="finanzKacheln"></div>
+    <div class="karte">
+      <h2>Kleinunternehmerregelung</h2>
+      <div id="kuStatus"></div>
+    </div>
+    <div class="karte">
+      <h2>Monate</h2>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Monat</th><th class="num">Umsatz</th><th class="num">Ausgaben</th>
+        <th class="num">Gewinn</th><th class="num">Rücklage</th><th class="num">Umsatz kumuliert</th>
+      </tr></thead><tbody id="monatsListe"></tbody></table></div>
+    </div>
+    <div class="karte">
+      <h2>Journal</h2>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Datum</th><th>Beschreibung</th><th>Kategorie</th><th class="num">Einnahme</th>
+        <th class="num">Ausgabe</th><th class="num">Saldo</th><th></th>
+      </tr></thead><tbody id="journalListe"></tbody></table></div>
+    </div>
+    <div class="karte">
+      <h2>Ausrüstungsbudget</h2>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Position</th><th>Empfehlung</th><th class="num">Preis</th><th>Beschafft</th>
+      </tr></thead><tbody id="budgetListe"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="tab-kanaele">
+    <div class="karte">
+      <h2>Kanal hinzufügen</h2>
+      <div class="feldreihe">
+        <div><label>Plattform</label><input id="cPlattform" placeholder="z. B. Fansly"></div>
+        <div><label>Zweck</label><select id="cZweck"></select></div>
+        <div><label>Handle</label><input id="cHandle" placeholder="@künstlername"></div>
+        <div><button class="knopf" onclick="kanalAnlegen()">Hinzufügen</button></div>
+      </div>
+    </div>
+    <div class="karte">
+      <h2>Kanal-Register</h2>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Plattform</th><th>Zweck</th><th>Handle</th><th>Projekt-Mail</th>
+        <th>Angelegt</th><th>2FA</th><th>Verifiziert</th>
+      </tr></thead><tbody id="kanalListe"></tbody></table></div>
+    </div>
+    <div class="karte">
+      <h2>OPSEC-Checkliste</h2>
+      <div id="opsecListe"></div>
+    </div>
+  </section>
+
+  <section id="tab-fahrplan">
+    <div class="karte">
+      <h2>Aufgabe hinzufügen</h2>
+      <div class="feldreihe">
+        <div><label>Titel</label><input id="aTitel"></div>
+        <div><label>Bereich</label><select id="aBereich"></select></div>
+        <div><label>Fällig</label><input type="date" id="aFaellig"></div>
+        <div><label>Priorität</label><select id="aPrio"></select></div>
+        <div><button class="knopf" onclick="aufgabeAnlegen()">Hinzufügen</button></div>
+      </div>
+    </div>
+    <div class="karte">
+      <h2>Aufgaben</h2>
+      <label style="display:inline-flex;gap:.4rem;align-items:center;margin-bottom:.5rem">
+        <input type="checkbox" id="nurOffen" style="width:auto" onchange="ladeFahrplan()" checked>
+        nur offene
+      </label>
+      <div class="tabellenrahmen"><table><thead><tr>
+        <th>Fällig</th><th>Aufgabe</th><th>Bereich</th><th>Priorität</th><th>Status</th>
+      </tr></thead><tbody id="aufgabenListe"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="tab-vorlagen">
+    <div class="karte">
+      <h2>Textvorlagen</h2>
+      <div class="hinweisbox">Arbeitsentwürfe aus der Checkliste des Konzepts — kein geprüfter
+        Vertragstext und keine Rechtsberatung. Den Model-Release vor der ersten Verwendung
+        einmalig anwaltlich prüfen lassen.</div>
+      <div class="feldreihe">
+        <div><label>Vorlage</label><select id="vAuswahl" onchange="ladeVorlage()"></select></div>
+        <div><button class="knopf leise" onclick="vorlageKopieren()">In Zwischenablage</button></div>
+      </div>
+      <pre id="vorlageText">Bitte eine Vorlage auswählen.</pre>
+    </div>
+  </section>
+
+  <section id="tab-einstellungen">
+    <div class="karte">
+      <h2>Projekt</h2>
+      <div class="feldreihe">
+        <div><label>Künstlername</label><input id="sName"></div>
+        <div><label>Projekt-Kontakt (Mail)</label><input id="sKontakt"></div>
+        <div><label>Rücklage-Satz (%)</label><input type="number" id="sSatz" min="0" max="100" step="1"></div>
+        <div><label>Vorjahresumsatz (EUR)</label><input type="number" id="sVorjahr" min="0" step="0.01"></div>
+        <div><button class="knopf" onclick="projektSpeichern()">Speichern</button></div>
+      </div>
+    </div>
+    <div class="karte">
+      <h2>Startdatenbestand</h2>
+      <p class="leer">Legt Ausrüstungsbudget, Kanal-Grundaufbau und den Fahrplan aus dem Konzept
+        an. Vorhandene Einträge bleiben unberührt.</p>
+      <button class="knopf leise" onclick="seedLaden()">Startdaten anlegen</button>
+    </div>
+    <div class="karte">
+      <h2>Statusbericht</h2>
+      <p class="leer">Erzeugt eine HTML-Datei im Datenordner — zum Ausdrucken oder zur Weitergabe
+        an den Steuerberater. Enthält keine Aktenzeichen und keine Dokumente.</p>
+      <button class="knopf leise" onclick="berichtErzeugen()">Bericht erzeugen</button>
+      <p class="leer" id="berichtPfad"></p>
+    </div>
+    <div class="karte">
+      <h2>Datenordner</h2>
+      <p class="leer" id="datenordner"></p>
+      <div class="hinweisbox" id="ablageHinweis2"></div>
+    </div>
+  </section>
+</main>
+
+<div id="fehler"></div>
+
+<script>
+"use strict";
+const TABS = [
+  ["uebersicht","Übersicht"], ["partnerinnen","Partnerinnen"], ["drehs","Drehs"],
+  ["kalender","Kalender"], ["finanzen","Finanzen"], ["kanaele","Kanäle"],
+  ["fahrplan","Fahrplan"], ["vorlagen","Vorlagen"], ["einstellungen","Einstellungen"],
+];
+let START = null;
+
+function $(id){ return document.getElementById(id); }
+function esc(t){ const d=document.createElement("div"); d.textContent = t==null?"":String(t); return d.innerHTML; }
+function eur(n){ return (Number(n)||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"}); }
+
+function fehler(text){
+  const box = $("fehler");
+  box.textContent = text;
+  box.style.display = "block";
+  clearTimeout(box._t);
+  box._t = setTimeout(()=>{ box.style.display="none"; }, 6000);
+}
+
+async function api(pfad, daten){
+  const antwort = await fetch(pfad, {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(daten||{})
+  });
+  const ergebnis = await antwort.json();
+  if(!antwort.ok || ergebnis.error){ throw new Error(ergebnis.error || "Unbekannter Fehler"); }
+  return ergebnis;
+}
+async function ruf(pfad, daten){
+  try { return await api(pfad, daten); }
+  catch(e){ fehler(e.message); return null; }
+}
+
+// --- Navigation ---
+function navBauen(){
+  const nav = $("nav");
+  TABS.forEach(([schluessel,label],i)=>{
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.className = i===0 ? "aktiv" : "";
+    b.onclick = ()=> tabZeigen(schluessel, b);
+    nav.appendChild(b);
+  });
+}
+function tabZeigen(schluessel, knopf){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("aktiv"));
+  knopf.classList.add("aktiv");
+  document.querySelectorAll("main section").forEach(s=>s.classList.remove("aktiv"));
+  $("tab-"+schluessel).classList.add("aktiv");
+  const lader = {
+    uebersicht: ladeLage, partnerinnen: ladePartnerinnen, drehs: ladeDrehs,
+    kalender: ladeKalender, finanzen: ladeFinanzen, kanaele: ladeKanaele,
+    fahrplan: ladeFahrplan,
+  }[schluessel];
+  if(lader) lader();
+}
+
+// --- Übersicht ---
+async function ladeLage(){
+  const lage = await ruf("/api/lage");
+  if(!lage) return;
+  const f = lage.finanzen, p = lage.partnerinnen;
+  const kacheln = [
+    ["Freigegeben", p.freigegeben+" / "+p.gesamt],
+    ["Im Vetting", String(p.im_vetting)],
+    ["Drehs veröffentlicht", String(lage.drehs.pipeline["veröffentlicht"]||0)],
+    ["Drehs blockiert", String(lage.drehs.blockiert + lage.drehs.gesperrt)],
+    ["Gewinn "+lage.projekt.jahr, eur(f.gewinn)],
+    ["Steuerrücklage", eur(f.ruecklage)],
+    ["Aufgaben offen", String(lage.fahrplan.offen)],
+    ["Überfällig", String(lage.fahrplan.ueberfaellig)],
+  ];
+  $("kacheln").innerHTML = kacheln.map(([l,w])=>
+    `<div class="kachel"><div class="label">${esc(l)}</div><div class="wert">${esc(w)}</div></div>`
+  ).join("");
+
+  $("warnungen").innerHTML = lage.warnungen.length
+    ? lage.warnungen.map(m=>`<div class="meldung ${esc(m.stufe)}"><b>${esc(m.bereich)}</b>${esc(m.text)}</div>`).join("")
+    : '<p class="leer">Keine offenen Punkte.</p>';
+
+  $("naechsteSlots").innerHTML = lage.naechste_slots.length
+    ? lage.naechste_slots.map(s=>`<tr><td>${esc(s.datum)} ${esc(s.wochentag||"")}</td>
+        <td><span class="pill">${esc(s.typ)}</span></td><td>${esc(s.kanal)}</td>
+        <td>${esc(s.thema)}</td><td>${esc(s.status)}</td></tr>`).join("")
+    : '<tr><td colspan="5" class="leer">Kein Slot geplant.</td></tr>';
+
+  $("kopfSub").textContent = (lage.projekt.kuenstlername || "ohne Künstlername")
+    + " · " + lage.projekt.jahr;
+}
+
+// --- Partnerinnen ---
+async function partnerinAnlegen(){
+  const daten = {
+    pseudonym: $("pPseudonym").value,
+    quelle: $("pQuelle").value,
+    aktenzeichen: $("pAkte").value,
+  };
+  const ergebnis = await ruf("/api/partnerin/anlegen", daten);
+  if(!ergebnis) return;
+  $("pPseudonym").value = ""; $("pQuelle").value = ""; $("pAkte").value = "";
+  zeichnePartnerinnen(ergebnis);
+}
+
+async function ladePartnerinnen(){
+  const ergebnis = await ruf("/api/partnerinnen");
+  if(ergebnis) zeichnePartnerinnen(ergebnis);
+}
+
+function zeichnePartnerinnen(ergebnis){
+  const ziel = $("partnerListe");
+  if(!ergebnis.zeilen.length){
+    ziel.innerHTML = '<div class="karte"><p class="leer">Noch keine Partnerin erfasst.</p></div>';
+    fuellePartnerAuswahl([]);
+    return;
+  }
+  ziel.innerHTML = ergebnis.zeilen.map(z=>{
+    const anteil = Math.round(100*z.erledigt/z.gesamt);
+    const marke = z.status==="widerrufen" ? '<span class="pill krit">widerrufen</span>'
+      : z.freigegeben ? '<span class="pill ok">freigegeben</span>'
+      : `<span class="pill warn">${esc(z.status)}</span>`;
+    const gates = ergebnis.gates.map(g=>{
+      const an = !z.offen.includes(g.label);
+      return `<label class="gate"><input type="checkbox" ${an?"checked":""}
+        ${z.status==="widerrufen"?"disabled":""}
+        onchange="gateSetzen('${z.id}','${g.schluessel}',this.checked)">
+        <span>${esc(g.label)}</span><span class="erkl">${esc(g.erklaerung)}</span></label>`;
+    }).join("");
+    const sti = z.sti_gueltig_bis
+      ? `${esc(z.sti_gueltig_bis)}${z.sti_abgelaufen?' <span class="pill krit">abgelaufen</span>':''}`
+      : "—";
+    return `<div class="karte">
+      <h2>${esc(z.pseudonym)} ${marke}</h2>
+      <div style="font-size:.8rem;color:var(--leise)">
+        ${esc(z.erledigt)} von ${esc(z.gesamt)} Schritten
+        ${z.quelle?" · Quelle: "+esc(z.quelle):""}
+        ${z.aktenzeichen?" · Akte: "+esc(z.aktenzeichen):""}
+      </div>
+      <div class="balken"><div style="width:${anteil}%"></div></div>
+      <div class="gateliste">${gates}</div>
+      <div class="feldreihe">
+        <div><label>STI-Nachweis gültig bis</label>
+          <input type="date" value="${esc(z.sti_gueltig_bis||"")}"
+                 onchange="stiSetzen('${z.id}',this.value)"></div>
+        <div><label>Aktuell</label><div style="padding-top:.35rem;font-size:.85rem">${sti}</div></div>
+        <div>${z.status==="widerrufen"
+          ? `<button class="knopf leise" onclick="widerruf('${z.id}',true)">Widerruf zurücknehmen</button>`
+          : `<button class="knopf gefahr" onclick="widerruf('${z.id}',false)">Widerruf erfassen</button>`}</div>
+      </div>
+      ${z.widerruf?`<div class="meldung kritisch"><b>Widerruf</b>${esc(z.widerruf.datum)}
+        ${z.widerruf.grund?" — "+esc(z.widerruf.grund):""}. Material muss offline sein.</div>`:""}
+    </div>`;
+  }).join("");
+  fuellePartnerAuswahl(ergebnis.zeilen);
+}
+
+async function gateSetzen(id, gate, erfuellt){
+  const ergebnis = await ruf("/api/partnerin/gate", {id, gate, erfuellt});
+  if(ergebnis) zeichnePartnerinnen(ergebnis); else ladePartnerinnen();
+}
+async function stiSetzen(id, gueltig_bis){
+  if(!gueltig_bis) return;
+  const ergebnis = await ruf("/api/partnerin/sti", {id, gueltig_bis});
+  if(ergebnis) zeichnePartnerinnen(ergebnis);
+}
+async function widerruf(id, zuruecknehmen){
+  if(!zuruecknehmen && !confirm(
+      "Widerruf erfassen?\n\nAlle Drehs mit dieser Partnerin werden gesperrt. "
+      + "Für bereits veröffentlichtes Material wird eine Aufgabe mit Frist angelegt.")) return;
+  const grund = zuruecknehmen ? "" : (prompt("Grund (optional):") || "");
+  const ergebnis = await ruf("/api/partnerin/widerruf", {id, zuruecknehmen, grund});
+  if(ergebnis) zeichnePartnerinnen(ergebnis);
+}
+
+function fuellePartnerAuswahl(zeilen){
+  const sel = $("dPartner");
+  if(!sel) return;
+  sel.innerHTML = zeilen.map(z=>
+    `<option value="${esc(z.id)}">${esc(z.pseudonym)}${z.freigegeben?" ✓":" (nicht freigegeben)"}</option>`
+  ).join("");
+}
+
+// --- Drehs ---
+async function drehAnlegen(){
+  const daten = {
+    datum: $("dDatum").value,
+    titel: $("dTitel").value,
+    partner_ids: [...$("dPartner").selectedOptions].map(o=>o.value),
+    plattformen: [...$("dPlattformen").selectedOptions].map(o=>o.value),
+  };
+  const ergebnis = await ruf("/api/dreh/anlegen", daten);
+  if(!ergebnis) return;
+  $("dTitel").value = "";
+  zeichneDrehs(ergebnis.zeilen);
+}
+async function ladeDrehs(){
+  const ergebnis = await ruf("/api/drehs");
+  if(ergebnis) zeichneDrehs(ergebnis.zeilen);
+  const p = await ruf("/api/partnerinnen");
+  if(p) fuellePartnerAuswahl(p.zeilen);
+}
+function zeichneDrehs(zeilen){
+  const ziel = $("drehListe");
+  if(!zeilen.length){ ziel.innerHTML = '<tr><td colspan="7" class="leer">Noch kein Dreh geplant.</td></tr>'; return; }
+  ziel.innerHTML = zeilen.map(z=>{
+    const optionen = START.dreh_status.map(s=>
+      `<option value="${esc(s)}" ${s===z.status?"selected":""}>${esc(s)}</option>`).join("");
+    const freigabe = z.gesperrt ? '<span class="pill krit">gesperrt</span>'
+      : z.startklar ? '<span class="pill ok">frei</span>'
+      : `<span class="pill warn" title="${esc(z.blockiert_durch.map(b=>b.pseudonym+": "+b.gruende.join(", ")).join(" | "))}">blockiert</span>`;
+    return `<tr>
+      <td>${esc(z.datum)}</td><td>${esc(z.titel)}</td>
+      <td>${esc(z.partner.join(", ") || "solo")}</td>
+      <td>${esc(z.plattformen.join(", ") || "—")}</td>
+      <td><select onchange="drehStatus('${z.id}',this.value)">${optionen}</select></td>
+      <td>${freigabe}</td>
+      <td><button class="knopf leise klein" onclick="drehLoeschen('${z.id}')">löschen</button></td>
+    </tr>`;
+  }).join("");
+}
+async function drehStatus(id, status){
+  const ergebnis = await ruf("/api/dreh/status", {id, status});
+  if(ergebnis) zeichneDrehs(ergebnis.zeilen); else ladeDrehs();
+}
+async function drehLoeschen(id){
+  if(!confirm("Diesen Dreh löschen?")) return;
+  const ergebnis = await ruf("/api/dreh/loeschen", {id});
+  if(ergebnis) zeichneDrehs(ergebnis.zeilen);
+}
+
+// --- Kalender ---
+async function kalenderPlanen(){
+  const ergebnis = await ruf("/api/kalender/planen", {
+    start: $("kStart").value,
+    wochen: Number($("kWochen").value),
+    ersetzen: $("kErsetzen").checked,
+  });
+  if(ergebnis) zeichneKalender(ergebnis.zeilen);
+}
+async function ladeKalender(){
+  const ergebnis = await ruf("/api/kalender");
+  if(ergebnis) zeichneKalender(ergebnis.zeilen);
+}
+function zeichneKalender(zeilen){
+  const ziel = $("kalenderListe");
+  if(!zeilen.length){ ziel.innerHTML = '<tr><td colspan="5" class="leer">Kalender ist leer.</td></tr>'; return; }
+  ziel.innerHTML = zeilen.map(s=>{
+    const optionen = START.slot_status.map(w=>
+      `<option value="${esc(w)}" ${w===s.status?"selected":""}>${esc(w)}</option>`).join("");
+    return `<tr>
+      <td>${esc(s.datum)} ${esc(s.wochentag||"")}</td>
+      <td><span class="pill">${esc(s.typ)}</span></td>
+      <td>${esc(s.kanal)}</td>
+      <td><input value="${esc(s.thema)}" onchange="slotAendern('${s.id}',{thema:this.value})"></td>
+      <td><select onchange="slotAendern('${s.id}',{status:this.value})">${optionen}</select></td>
+    </tr>`;
+  }).join("");
+}
+async function slotAendern(id, felder){
+  const ergebnis = await ruf("/api/kalender/slot", Object.assign({id}, felder));
+  if(!ergebnis) ladeKalender();
+}
+
+// --- Finanzen ---
+async function buchen(){
+  const kategorie = $("bKategorie").value;
+  const betrag = Number($("bBetrag").value);
+  const einnahme = START.kategorien.einnahme.includes(kategorie);
+  const ergebnis = await ruf("/api/buchen", {
+    datum: $("bDatum").value, beschreibung: $("bText").value, kategorie,
+    einnahme: einnahme ? betrag : 0, ausgabe: einnahme ? 0 : betrag,
+    beleg: $("bBeleg").value,
+  });
+  if(!ergebnis) return;
+  $("bText").value = ""; $("bBetrag").value = ""; $("bBeleg").value = "";
+  zeichneFinanzen(ergebnis);
+}
+async function ladeFinanzen(){
+  const ergebnis = await ruf("/api/finanzen");
+  if(ergebnis) zeichneFinanzen(ergebnis);
+}
+function zeichneFinanzen(f){
+  $("finanzKacheln").innerHTML = [
+    ["Einnahmen "+f.jahr, eur(f.euer.einnahmen)],
+    ["Ausgaben", eur(f.euer.ausgaben)],
+    ["Gewinn", eur(f.euer.gewinn)],
+    ["Buchungen", String(f.euer.buchungen)],
+  ].map(([l,w])=>`<div class="kachel"><div class="label">${esc(l)}</div><div class="wert">${esc(w)}</div></div>`).join("");
+
+  const ku = f.kleinunternehmer;
+  $("kuStatus").innerHTML =
+    `<p style="font-size:.9rem">${ku.anwendbar
+      ? '<span class="pill ok">anwendbar</span>'
+      : '<span class="pill krit">nicht mehr anwendbar</span>'}
+      &nbsp; Umsatz laufendes Jahr <b>${eur(ku.laufender_umsatz)}</b>,
+      Vorjahr <b>${eur(ku.vorjahresumsatz)}</b></p>`
+    + ku.hinweise.map(h=>`<div class="meldung ${ku.anwendbar?"":"kritisch"}">${esc(h)}</div>`).join("");
+
+  // Künftige Monate ohne Buchung weglassen — sonst zwölf Nullzeilen.
+  const bisMonat = new Date().toISOString().slice(0,7);
+  const monate = f.monate.filter(m => m.umsatz || m.ausgaben || m.monat <= bisMonat);
+  $("monatsListe").innerHTML = monate.map(m=>`<tr>
+      <td>${esc(m.monat)}</td><td class="num">${eur(m.umsatz)}</td>
+      <td class="num">${eur(m.ausgaben)}</td><td class="num">${eur(m.gewinn)}</td>
+      <td class="num">${eur(m.ruecklage)}</td><td class="num">${eur(m.umsatz_kumuliert)}</td>
+    </tr>`).join("");
+
+  $("journalListe").innerHTML = f.journal.length ? f.journal.map(b=>`<tr>
+      <td>${esc(b.datum)}</td><td>${esc(b.beschreibung)}</td><td>${esc(b.kategorie)}</td>
+      <td class="num">${b.einnahme?eur(b.einnahme):"—"}</td>
+      <td class="num">${b.ausgabe?eur(b.ausgabe):"—"}</td>
+      <td class="num">${eur(b.saldo)}</td>
+      <td><button class="knopf leise klein" onclick="buchungLoeschen('${b.id}')">löschen</button></td>
+    </tr>`).join("") : '<tr><td colspan="7" class="leer">Noch keine Buchung.</td></tr>';
+
+  $("budgetListe").innerHTML = f.budget.posten.map(p=>`<tr>
+      <td>${esc(p.position)}</td><td>${esc(p.empfehlung)}</td>
+      <td class="num">${p.preis_bis?eur(p.preis_von)+" – "+eur(p.preis_bis):"—"}</td>
+      <td><input type="checkbox" style="width:auto" ${p.beschafft?"checked":""}
+           onchange="budgetSetzen('${p.id}',this.checked)"></td>
+    </tr>`).join("");
+}
+async function buchungLoeschen(id){
+  if(!confirm("Buchung löschen?")) return;
+  const ergebnis = await ruf("/api/buchung/loeschen", {id});
+  if(ergebnis) zeichneFinanzen(ergebnis);
+}
+async function budgetSetzen(id, beschafft){
+  await ruf("/api/budget", {id, beschafft});
+}
+
+// --- Kanäle ---
+async function kanalAnlegen(){
+  const ergebnis = await ruf("/api/kanal/anlegen", {
+    plattform: $("cPlattform").value, zweck: $("cZweck").value, handle: $("cHandle").value,
+  });
+  if(!ergebnis) return;
+  $("cPlattform").value = ""; $("cHandle").value = "";
+  zeichneKanaele(ergebnis);
+}
+async function ladeKanaele(){
+  const ergebnis = await ruf("/api/kanaele");
+  if(ergebnis) zeichneKanaele(ergebnis);
+}
+function zeichneKanaele(ergebnis){
+  $("kanalListe").innerHTML = ergebnis.zeilen.map(k=>`<tr>
+      <td>${esc(k.plattform)}</td><td><span class="pill">${esc(k.zweck)}</span></td>
+      <td><input value="${esc(k.handle||"")}" onchange="kanalAendern('${k.id}',{handle:this.value})"></td>
+      <td><input value="${esc(k.email||"")}" onchange="kanalAendern('${k.id}',{email:this.value})"></td>
+      <td><input type="checkbox" style="width:auto" ${k.angelegt?"checked":""}
+           onchange="kanalAendern('${k.id}',{angelegt:this.checked})"></td>
+      <td><input type="checkbox" style="width:auto" ${k.zwei_faktor?"checked":""}
+           onchange="kanalAendern('${k.id}',{zwei_faktor:this.checked})"></td>
+      <td><input type="checkbox" style="width:auto" ${k.verifiziert?"checked":""}
+           onchange="kanalAendern('${k.id}',{verifiziert:this.checked})"></td>
+    </tr>`).join("");
+
+  const o = ergebnis.opsec;
+  $("opsecListe").innerHTML =
+    `<p class="leer">Setup: ${o.setup_erledigt} von ${o.setup_gesamt} Punkten erledigt.</p>`
+    + '<div class="gateliste">' + o.punkte.map(p=>`
+      <label class="gate"><input type="checkbox" ${p.erledigt?"checked":""}
+        onchange="opsecSetzen('${p.schluessel}',this.checked)">
+        <span>${esc(p.label)}</span>
+        <span class="erkl">${p.art==="pro_upload"?"vor jedem Upload":"einmalig"}</span></label>`).join("")
+    + "</div>";
+}
+async function kanalAendern(id, felder){
+  const ergebnis = await ruf("/api/kanal/aktualisieren", Object.assign({id}, felder));
+  if(ergebnis) zeichneKanaele(ergebnis);
+}
+async function opsecSetzen(schluessel, erledigt){
+  const ergebnis = await ruf("/api/opsec", {schluessel, erledigt});
+  if(ergebnis) zeichneKanaele(ergebnis);
+}
+
+// --- Fahrplan ---
+async function aufgabeAnlegen(){
+  const ergebnis = await ruf("/api/aufgabe/anlegen", {
+    titel: $("aTitel").value, bereich: $("aBereich").value,
+    faellig: $("aFaellig").value, prioritaet: $("aPrio").value,
+  });
+  if(!ergebnis) return;
+  $("aTitel").value = "";
+  zeichneFahrplan(ergebnis.zeilen);
+}
+async function ladeFahrplan(){
+  const ergebnis = await ruf("/api/fahrplan", {nur_offen: $("nurOffen").checked});
+  if(ergebnis) zeichneFahrplan(ergebnis.zeilen);
+}
+function zeichneFahrplan(zeilen){
+  const ziel = $("aufgabenListe");
+  if(!zeilen.length){ ziel.innerHTML = '<tr><td colspan="5" class="leer">Keine Aufgaben.</td></tr>'; return; }
+  ziel.innerHTML = zeilen.map(a=>{
+    const optionen = ["offen","laufend","erledigt","entfällt"].map(s=>
+      `<option value="${esc(s)}" ${s===a.status?"selected":""}>${esc(s)}</option>`).join("");
+    const prio = a.prioritaet==="hoch" ? "krit" : a.prioritaet==="mittel" ? "warn" : "";
+    return `<tr>
+      <td>${esc(a.faellig||"—")} ${a.ueberfaellig?'<span class="pill krit">überfällig</span>':""}</td>
+      <td>${esc(a.titel)}${a.notiz?`<div class="erkl" style="color:var(--leise);font-size:.78rem">${esc(a.notiz)}</div>`:""}</td>
+      <td>${esc(a.bereich)}</td>
+      <td><span class="pill ${prio}">${esc(a.prioritaet)}</span></td>
+      <td><select onchange="aufgabeStatus('${a.id}',this.value)">${optionen}</select></td>
+    </tr>`;
+  }).join("");
+}
+async function aufgabeStatus(id, status){
+  const ergebnis = await ruf("/api/aufgabe/status", {id, status});
+  if(ergebnis) zeichneFahrplan(ergebnis.zeilen); else ladeFahrplan();
+}
+
+// --- Vorlagen ---
+async function ladeVorlage(){
+  const schluessel = $("vAuswahl").value;
+  if(!schluessel) return;
+  const ergebnis = await ruf("/api/vorlage", {schluessel});
+  if(ergebnis) $("vorlageText").textContent = ergebnis.text;
+}
+function vorlageKopieren(){
+  const text = $("vorlageText").textContent;
+  if(navigator.clipboard) navigator.clipboard.writeText(text).then(
+    ()=>fehler("In die Zwischenablage kopiert."), ()=>fehler("Kopieren nicht möglich."));
+}
+
+// --- Einstellungen ---
+async function projektSpeichern(){
+  const ergebnis = await ruf("/api/projekt", {
+    kuenstlername: $("sName").value,
+    kontakt: $("sKontakt").value,
+    ruecklage_satz: Number($("sSatz").value)/100,
+    vorjahresumsatz: Number($("sVorjahr").value)||0,
+  });
+  if(ergebnis){ fehler("Gespeichert."); ladeLage(); }
+}
+async function seedLaden(){
+  const ergebnis = await ruf("/api/seed", {kuenstlername: $("sName").value});
+  if(ergebnis){
+    const a = ergebnis.angelegt;
+    fehler(`Angelegt: ${a.budget} Budgetposten, ${a.kanaele} Kanäle, ${a.fahrplan} Aufgaben.`);
+    ladeLage();
+  }
+}
+async function berichtErzeugen(){
+  const ergebnis = await ruf("/api/bericht", {});
+  if(ergebnis) $("berichtPfad").textContent = "Gespeichert unter: " + ergebnis.pfad;
+}
+
+// --- Start ---
+function optionen(sel, werte){
+  $(sel).innerHTML = werte.map(w=>`<option value="${esc(w)}">${esc(w)}</option>`).join("");
+}
+
+async function start(){
+  navBauen();
+  START = await ruf("/api/start");
+  if(!START) return;
+
+  optionen("dPlattformen", START.plattformen);
+  optionen("bKategorie", START.kategorien.einnahme.concat(START.kategorien.ausgabe));
+  optionen("cZweck", START.zwecke);
+  optionen("aBereich", START.bereiche);
+  optionen("aPrio", START.prioritaeten);
+  $("vAuswahl").innerHTML = '<option value="">— auswählen —</option>' +
+    START.vorlagen.map(v=>`<option value="${esc(v.schluessel)}">${esc(v.titel)}</option>`).join("");
+
+  const heute = new Date().toISOString().slice(0,10);
+  ["dDatum","bDatum","kStart"].forEach(id=>{ $(id).value = heute; });
+
+  $("ablageHinweis").textContent = START.ablage_hinweis;
+  $("ablageHinweis2").textContent = START.ablage_hinweis;
+  $("datenordner").textContent = START.datenordner;
+
+  const p = START.projekt;
+  $("sName").value = p.kuenstlername || "";
+  $("sKontakt").value = p.kontakt || "";
+  $("sSatz").value = Math.round((p.ruecklage_satz ?? 0.25)*100);
+  $("sVorjahr").value = p.vorjahresumsatz || 0;
+
+  ladeLage();
+}
+start();
+</script>
+</body>
+</html>

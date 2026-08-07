@@ -18,9 +18,11 @@ dev = ["pytest>=7"]
 
 [project.scripts]
 strategylab = "strategylab.cli:main"
+creatordock = "creatordock.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["strategylab*"]
+include = ["strategylab*", "creatordock*"]
 
 [tool.setuptools.package-data]
 strategylab = ["web/*.html"]
+creatordock = ["web/*.html"]
