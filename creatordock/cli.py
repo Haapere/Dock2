@@ -10,12 +10,14 @@ import argparse
 import sys
 
 from creatordock import (
+    angebot,
     dashboard,
     drehs,
     fahrplan,
     finanzen,
     kalender,
     kanaele,
+    persona,
     report,
     seed,
     vorlagen,
@@ -164,6 +166,112 @@ def cmd_dreh(args) -> int:
     return 2
 
 
+def cmd_angebot(args) -> int:
+    store = _store(args)
+    partner_id = args.partnerin
+    if args.aktion == "zeigen":
+        titel = f"Vereinbarung mit {store.finden('partnerinnen', partner_id)['pseudonym']}" \
+            if partner_id else "Standardangebot"
+        print(f"{titel}\n")
+        letzte = ""
+        for eintrag in angebot.katalog(store, partner_id):
+            if eintrag["kategorie"] != letzte:
+                letzte = eintrag["kategorie"]
+                print(f"  {letzte}")
+            wert = eintrag["wert"]
+            anzeige = ("ja" if wert else "nein") if eintrag["typ"] == "ja_nein" else wert
+            marken = []
+            if eintrag["abweichend"]:
+                marken.append("abweichend")
+            if eintrag["erzeugt_auflage"]:
+                marken.append("Auflage")
+            zusatz = f"  [{', '.join(marken)}]" if marken else ""
+            print(f"    {eintrag['schluessel']:<28} {anzeige}{zusatz}")
+        return 0
+
+    if args.aktion == "setzen":
+        wert: object = args.wert
+        if wert in ("ja", "nein"):
+            wert = wert == "ja"
+        if partner_id:
+            angebot.vereinbarung_setzen(store, partner_id, args.schluessel, wert)
+        else:
+            angebot.standard_setzen(store, args.schluessel, wert)
+        store.speichern()
+        print(f"'{args.schluessel}' gesetzt auf: {args.wert}")
+        return 0
+
+    if args.aktion == "blatt":
+        print(angebot.angebotsblatt(store, partner_id))
+        return 0
+
+    print("Unbekannte Aktion.")
+    return 2
+
+
+def cmd_persona(args) -> int:
+    store = _store(args)
+    if args.aktion == "status":
+        stand = persona.fortschritt(store)
+        print(f"Identitätsaufbau: {stand['erledigt']} von {stand['gesamt']} "
+              f"({stand['anteil']} %)")
+        print(f"  Künstlername: {stand['kuenstlername'] or '— noch keiner —'}")
+        if stand["offen"]:
+            print("\n  Offen:")
+            for punkt in stand["offen"]:
+                print(f"    - {punkt}")
+        print("\n  Stufenplan:")
+        for name, zeitraum, schritte in persona.AUFBAU_PHASEN:
+            print(f"    {name} ({zeitraum})")
+            for schritt in schritte:
+                print(f"      - {schritt}")
+        return 0
+
+    if args.aktion == "setzen":
+        if args.schluessel in {s for s, _, _ in persona.IDENTITAET_FELDER}:
+            persona.identitaet_setzen(store, args.schluessel, args.wert or "")
+        else:
+            persona.steckbrief_setzen(store, args.schluessel, args.wert or "")
+        store.speichern()
+        print(f"'{args.schluessel}' gespeichert.")
+        return 0
+
+    if args.aktion == "namen":
+        zeilen = persona.namensuebersicht(store)
+        if not zeilen:
+            print("Noch keine Namenskandidaten. Anlegen mit: persona name --name \"...\"")
+            return 0
+        for kandidat in zeilen:
+            marke = "*" if kandidat["favorit"] else " "
+            print(f"{marke}{kandidat['id']:<4} {kandidat['name']:<22} "
+                  f"frei {kandidat['frei']}, vergeben {kandidat['vergeben']}, "
+                  f"offen {kandidat['offen']}")
+            for plattform, status in (kandidat.get("geprueft") or {}).items():
+                if status != "offen":
+                    print(f"        {plattform}: {status}")
+        return 0
+
+    if args.aktion == "name":
+        kandidat = persona.name_vorschlagen(store, args.name)
+        store.speichern()
+        print(f"{kandidat['id']}: '{kandidat['name']}' aufgenommen. "
+              "Verfügbarkeit je Plattform prüfen und eintragen.")
+        return 0
+
+    if args.aktion == "bios":
+        for bio in persona.alle_bios(store):
+            marke = "" if bio["passt"] else "  ZU LANG"
+            print(f"\n{bio['plattform']} ({bio['zeichen']}/{bio['limit']} Zeichen){marke}")
+            print(f"  Inhalt: {bio['inhalt']}")
+            print(f"  {bio['text']}")
+            for hinweis in bio["hinweise"]:
+                print(f"    ! {hinweis}")
+        return 0
+
+    print("Unbekannte Aktion.")
+    return 2
+
+
 def cmd_buchen(args) -> int:
     store = _store(args)
     eintrag = finanzen.buchen(
@@ -234,7 +342,7 @@ def cmd_vorlage(args) -> int:
         for eintrag in vorlagen.namen():
             print(f"  {eintrag['schluessel']:<16} {eintrag['titel']}")
         return 0
-    text = vorlagen.rendern(store, args.name)
+    text = vorlagen.rendern(store, args.name, partner_id=args.partnerin)
     if args.out:
         from pathlib import Path
         ziel = Path(args.out).expanduser()
@@ -320,6 +428,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--wert", choices=list(drehs.STATUS_REIHENFOLGE))
     p.set_defaults(func=cmd_dreh)
 
+    p = unter.add_parser("angebot", help="Was du Partnerinnen zusagst")
+    p.add_argument("aktion", choices=["zeigen", "setzen", "blatt"], nargs="?", default="zeigen")
+    p.add_argument("--partnerin", help="ID — dann gilt es nur für sie")
+    p.add_argument("--schluessel")
+    p.add_argument("--wert")
+    p.set_defaults(func=cmd_angebot)
+
+    p = unter.add_parser("persona", help="Social-Media-Identität aufbauen")
+    p.add_argument("aktion", choices=["status", "setzen", "namen", "name", "bios"],
+                   nargs="?", default="status")
+    p.add_argument("--schluessel")
+    p.add_argument("--wert")
+    p.add_argument("--name")
+    p.set_defaults(func=cmd_persona)
+
     p = unter.add_parser("buchen", help="Einnahme oder Ausgabe erfassen")
     p.add_argument("datum")
     p.add_argument("beschreibung")
@@ -352,6 +475,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = unter.add_parser("vorlage", help="Textvorlage ausgeben")
     p.add_argument("name", nargs="?", choices=list(vorlagen.VORLAGEN))
+    p.add_argument("--partnerin", help="ID — setzt ihre Vereinbarung ein")
     p.add_argument("--out")
     p.set_defaults(func=cmd_vorlage)
 
@@ -392,6 +516,9 @@ def _fehlende_pflichtfelder(args) -> list[str]:
         ("dreh", "status"): ["id", "wert"],
         ("kalender", "planen"): ["start"],
         ("aufgabe", "erledigt"): ["id"],
+        ("angebot", "setzen"): ["schluessel", "wert"],
+        ("persona", "setzen"): ["schluessel"],
+        ("persona", "name"): ["name"],
     }.get((befehl, aktion), [])
     return [f"--{feld}" for feld in erwartet if not getattr(args, feld, None)]
 

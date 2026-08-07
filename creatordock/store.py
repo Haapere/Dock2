@@ -41,6 +41,7 @@ SAMMLUNGEN = (
     "budget",
     "kalender",
     "fahrplan",
+    "namenskandidaten",
 )
 
 # Präfix der laufenden Nummer je Sammlung.
@@ -52,6 +53,7 @@ _PRAEFIX = {
     "budget": "E",
     "kalender": "S",
     "fahrplan": "A",
+    "namenskandidaten": "N",
 }
 
 

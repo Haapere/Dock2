@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from creatordock import drehs, fahrplan, finanzen, kalender, kanaele
+from creatordock import drehs, fahrplan, finanzen, kalender, kanaele, persona
 from creatordock import partnerinnen as partner_mod
 from creatordock.store import Store
 
@@ -67,6 +67,7 @@ def lagebild(store: Store, stichtag: str | None = None) -> dict:
             "gesamt": opsec["setup_gesamt"],
             "ohne_2fa": opsec["kanaele_ohne_2fa"],
         },
+        "persona": persona.fortschritt(store),
         "fahrplan": fahrplan.kennzahlen(store, stichtag=heute),
         "warnungen": warnungen(store, stichtag=heute),
     }
@@ -108,6 +109,14 @@ def warnungen(store: Store, stichtag: str | None = None) -> list[dict]:
                 f"Dreh {dreh['id']} ({dreh['titel']}) ist gesperrt und darf nicht "
                 "veröffentlicht werden.",
             )
+        elif dreh["status"] == "geschnitten" and dreh["auflagen_offen"]:
+            melden(
+                "warnung",
+                "Zusagen",
+                f"Dreh {dreh['id']} ({dreh['titel']}) kann nicht veröffentlicht werden — "
+                "offene Auflagen: "
+                + "; ".join(a["text"] for a in dreh["auflagen_offen"]),
+            )
         elif dreh["status"] == "geplant" and dreh["blockiert_durch"]:
             fehlend = "; ".join(
                 f"{b['pseudonym']}: {', '.join(b['gruende'])}" for b in dreh["blockiert_durch"]
@@ -145,6 +154,24 @@ def warnungen(store: Store, stichtag: str | None = None) -> list[dict]:
             "warnung",
             "Sicherheit",
             "Ohne Zwei-Faktor-Authentisierung: " + ", ".join(opsec["kanaele_ohne_2fa"]),
+        )
+
+    # Persona: ohne Künstlername und Nische läuft nichts anderes sinnvoll an
+    identitaet = persona.fortschritt(store)
+    if not identitaet["kuenstlername"]:
+        melden(
+            "warnung",
+            "Persona",
+            "Es ist noch kein Künstlername festgelegt — ohne ihn lassen sich "
+            "weder Kanäle noch Wasserzeichen konsistent aufbauen.",
+        )
+    elif identitaet["offen"]:
+        melden(
+            "hinweis",
+            "Persona",
+            f"Identitätsaufbau zu {identitaet['anteil']} % fertig — offen: "
+            + "; ".join(identitaet["offen"][:3])
+            + ("; …" if len(identitaet["offen"]) > 3 else ""),
         )
 
     # Leerer Kalender

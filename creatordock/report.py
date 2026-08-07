@@ -11,8 +11,10 @@ import html
 from datetime import date
 from pathlib import Path
 
+from creatordock import angebot as angebot_mod
 from creatordock import dashboard, drehs, fahrplan, finanzen, kalender, kanaele
 from creatordock import partnerinnen as partner_mod
+from creatordock import persona as persona_mod
 from creatordock.store import Store
 
 CSS = """
@@ -83,6 +85,8 @@ def html_bericht(store: Store, stichtag: str | None = None) -> str:
 
     teile.append(_kacheln(lage))
     teile.append(_warnungen(lage["warnungen"]))
+    teile.append(_persona(store, lage))
+    teile.append(_angebot(store))
     teile.append(_partnerinnen(store))
     teile.append(_drehs(store))
     teile.append(_kalender(store, heute))
@@ -131,6 +135,50 @@ def _warnungen(meldungen: list[dict]) -> str:
     return f"<h2>Offene Risiken ({len(meldungen)})</h2>{zeilen}"
 
 
+def _persona(store: Store, lage: dict) -> str:
+    stand = lage["persona"]
+    brief = persona_mod.steckbrief(store)
+    ident = persona_mod.identitaet(store)
+    zeilen = []
+    for schluessel, label, _ in persona_mod.STECKBRIEF_FELDER:
+        zeilen.append((label, brief.get(schluessel, "")))
+    for schluessel, label, _ in persona_mod.IDENTITAET_FELDER:
+        zeilen.append((label, ident.get(schluessel, "")))
+    körper = "".join(
+        f"<tr><td>{_e(label)}</td><td>{_e(wert) if wert else '<span class=nein>fehlt</span>'}</td></tr>"
+        if wert
+        else f"<tr><td>{_e(label)}</td><td class='nein'>fehlt</td></tr>"
+        for label, wert in zeilen
+    )
+    return (
+        f"<h2>Persona — {stand['anteil']} % aufgebaut</h2>"
+        f"<p><strong>Künstlername:</strong> "
+        f"{_e(stand['kuenstlername']) or '<span class=nein>noch keiner</span>'}</p>"
+        f"<table><tbody>{körper}</tbody></table>"
+    )
+
+
+def _angebot(store: Store) -> str:
+    eintraege = angebot_mod.katalog(store)
+    auflagen = [e for e in eintraege if e["erzeugt_auflage"]]
+    körper = "".join(
+        "<tr>"
+        f"<td>{_e(e['label'])}</td>"
+        f"<td>{_e('ja' if e['wert'] else 'nein') if e['typ'] == 'ja_nein' else _e(e['wert'])}</td>"
+        f"<td>{_e(e['kategorie'])}</td>"
+        f"<td>{'Auflage' if e['erzeugt_auflage'] else ''}</td>"
+        "</tr>"
+        for e in eintraege
+    )
+    return (
+        "<h2>Angebot an Partnerinnen (Standard)</h2>"
+        f"<p class='meta'>{len(auflagen)} dieser Zusagen werden vor jeder "
+        "Veröffentlichung technisch abgefragt.</p>"
+        "<table><thead><tr><th>Zusage</th><th>Wert</th><th>Bereich</th>"
+        f"<th>Durchsetzung</th></tr></thead><tbody>{körper}</tbody></table>"
+    )
+
+
 def _partnerinnen(store: Store) -> str:
     zeilen = partner_mod.uebersicht(store)
     if not zeilen:
@@ -164,13 +212,16 @@ def _drehs(store: Store) -> str:
         f"<td><span class='pill'>{_e(z['status'])}</span>"
         f"{' <span class=nein>gesperrt</span>' if z['gesperrt'] else ''}</td>"
         f"<td class='{'ja' if z['startklar'] else 'nein'}'>{'ja' if z['startklar'] else 'nein'}</td>"
+        f"<td class='num {'nein' if z['auflagen_offen'] else 'ja'}'>"
+        f"{len(z['auflagen']) - len(z['auflagen_offen'])} / {len(z['auflagen'])}</td>"
         "</tr>"
         for z in zeilen
     )
     return (
         "<h2>Drehs</h2>"
         "<table><thead><tr><th>Datum</th><th>Titel</th><th>Partnerinnen</th>"
-        f"<th>Plattformen</th><th>Status</th><th>Startklar</th></tr></thead><tbody>{körper}</tbody></table>"
+        "<th>Plattformen</th><th>Status</th><th>Startklar</th>"
+        f"<th class='num'>Auflagen</th></tr></thead><tbody>{körper}</tbody></table>"
     )
 
 

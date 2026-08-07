@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from creatordock import angebot as angebot_mod
 from creatordock import partnerinnen as partner_mod
 from creatordock.store import Store, pruefe_datum
 
@@ -38,9 +39,22 @@ def anlegen(
         "plattformen": list(plattformen or []),
         "status": "geplant",
         "gesperrt": False,
+        "auflagen_bestaetigt": {},
         "notizen": str(notizen or "").strip(),
     }
     return store.anlegen("drehs", eintrag)
+
+
+def auflage_bestaetigen(store: Store, kennung: str, schluessel: str, erfuellt: bool = True) -> dict:
+    """Hakt eine Veröffentlichungs-Auflage ab (z. B. „Gesicht unkenntlich“)."""
+    dreh = store.finden("drehs", kennung)
+    gueltig = {a["schluessel"] for a in angebot_mod.auflagen_fuer_dreh(store, dreh)}
+    if schluessel not in gueltig:
+        raise ValueError(
+            f"Für Dreh {kennung} gibt es keine Auflage '{schluessel}'."
+        )
+    dreh.setdefault("auflagen_bestaetigt", {})[schluessel] = bool(erfuellt)
+    return dreh
 
 
 def status_setzen(store: Store, kennung: str, neuer_status: str) -> dict:
@@ -63,6 +77,15 @@ def status_setzen(store: Store, kennung: str, neuer_status: str) -> dict:
             raise ValueError(
                 "Freigabe fehlt für: "
                 + "; ".join(f"{p} ({', '.join(gruende)})" for p, gruende in fehlend)
+            )
+
+    if neuer_status == "veröffentlicht":
+        # Die Zusagen aus dem Angebot werden hier zur harten Bedingung.
+        offen = angebot_mod.offene_auflagen(store, dreh)
+        if offen:
+            raise ValueError(
+                "Zugesagte Auflagen sind noch nicht bestätigt: "
+                + "; ".join(a["text"] for a in offen)
             )
 
     dreh["status"] = neuer_status
@@ -105,8 +128,11 @@ def uebersicht(store: Store) -> list[dict]:
     zeilen = []
     for dreh in sorted(store.sammlung("drehs"), key=lambda d: d.get("datum", "")):
         blockierend = blockierende_partnerinnen(store, dreh)
+        auflagen = angebot_mod.auflagen_fuer_dreh(store, dreh)
         zeilen.append(
             {
+                "auflagen": auflagen,
+                "auflagen_offen": [a for a in auflagen if not a["bestaetigt"]],
                 "id": dreh["id"],
                 "datum": dreh.get("datum", ""),
                 "titel": dreh.get("titel", ""),

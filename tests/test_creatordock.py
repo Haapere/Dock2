@@ -12,12 +12,14 @@ import json
 import pytest
 
 from creatordock import (
+    angebot,
     dashboard,
     drehs,
     fahrplan,
     finanzen,
     kalender,
     kanaele,
+    persona,
     report,
     seed,
     vorlagen,
@@ -34,6 +36,12 @@ def store(tmp_path) -> Store:
 def _voll_vetten(store: Store, kennung: str) -> None:
     for schluessel in partner_mod.GATE_SCHLUESSEL:
         partner_mod.gate_setzen(store, kennung, schluessel)
+
+
+def _alle_auflagen_bestaetigen(store: Store, dreh_id: str) -> None:
+    dreh = store.finden("drehs", dreh_id)
+    for auflage in angebot.auflagen_fuer_dreh(store, dreh):
+        drehs.auflage_bestaetigen(store, dreh_id, auflage["schluessel"])
 
 
 # --- Speicher -------------------------------------------------------------
@@ -126,8 +134,10 @@ def test_dreh_mit_freigabe_laeuft_durch(store):
     p = partner_mod.anlegen(store, "Model_A")
     _voll_vetten(store, p["id"])
     d = drehs.anlegen(store, "2026-09-01", "Test", partner_ids=[p["id"]])
-    for status in ("gedreht", "geschnitten", "veröffentlicht"):
-        drehs.status_setzen(store, d["id"], status)
+    drehs.status_setzen(store, d["id"], "gedreht")
+    drehs.status_setzen(store, d["id"], "geschnitten")
+    _alle_auflagen_bestaetigen(store, d["id"])
+    drehs.status_setzen(store, d["id"], "veröffentlicht")
     assert d["status"] == "veröffentlicht"
     assert "veroeffentlicht_am" in d
 
@@ -173,8 +183,10 @@ def test_widerruf_nach_veroeffentlichung_erzeugt_aufgabe_mit_frist(store):
     p = partner_mod.anlegen(store, "Model_A")
     _voll_vetten(store, p["id"])
     d = drehs.anlegen(store, "2026-09-01", "Eins", partner_ids=[p["id"]])
-    for status in ("gedreht", "geschnitten", "veröffentlicht"):
-        drehs.status_setzen(store, d["id"], status)
+    drehs.status_setzen(store, d["id"], "gedreht")
+    drehs.status_setzen(store, d["id"], "geschnitten")
+    _alle_auflagen_bestaetigen(store, d["id"])
+    drehs.status_setzen(store, d["id"], "veröffentlicht")
 
     vorher = len(store.sammlung("fahrplan"))
     partner_mod.widerrufen(store, p["id"], datum="2026-09-10")
@@ -203,6 +215,272 @@ def test_widerruf_zuruecknehmen_stellt_freigabe_wieder_her(store):
 
     assert not d["gesperrt"]
     assert partner_mod.ist_freigegeben(p)
+
+
+# --- Angebot: aus Zusagen werden Sperren ----------------------------------
+
+def test_standardangebot_hat_sinnvolle_voreinstellungen(store):
+    werte = angebot.standard(store)
+    assert werte["gesicht"] == "ohne Gesicht"
+    assert werte["begleitperson"] is True
+    assert werte["sichtungsrecht"] is True
+    assert werte["exklusivitaet"] is False  # schreckt erfahrene Darstellerinnen ab
+
+
+def test_vereinbarung_ueberschreibt_nur_punktuell(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    angebot.vereinbarung_setzen(store, p["id"], "gesicht", "mit Gesicht")
+    werte = angebot.vereinbarung(store, p["id"])
+    assert werte["gesicht"] == "mit Gesicht"
+    assert werte["sichtungsrecht"] is True  # Standard bleibt
+    assert angebot.standard(store)["gesicht"] == "ohne Gesicht"  # unberührt
+
+
+def test_abweichungen_werden_ausgewiesen(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    angebot.vereinbarung_setzen(store, p["id"], "gesicht", "mit Gesicht")
+    ab = angebot.abweichungen(store, p["id"])
+    assert len(ab) == 1
+    assert ab[0]["standard"] == "ohne Gesicht"
+    assert ab[0]["vereinbart"] == "mit Gesicht"
+
+
+def test_zuruecksetzen_stellt_standard_wieder_her(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    angebot.vereinbarung_setzen(store, p["id"], "gesicht", "mit Gesicht")
+    angebot.vereinbarung_zuruecksetzen(store, p["id"], "gesicht")
+    assert angebot.vereinbarung(store, p["id"])["gesicht"] == "ohne Gesicht"
+    assert angebot.abweichungen(store, p["id"]) == []
+
+
+def test_ungueltiger_wert_wird_abgelehnt(store):
+    with pytest.raises(ValueError, match="nicht möglich"):
+        angebot.standard_setzen(store, "gesicht", "vielleicht")
+
+
+def test_gesichtslos_erzeugt_auflage(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    d = drehs.anlegen(store, "2026-09-01", "Test", partner_ids=[p["id"]])
+    texte = [a["text"] for a in angebot.auflagen_fuer_dreh(store, d)]
+    assert any("Gesicht kommt im gesamten Material nicht vor" in t for t in texte)
+
+
+def test_mit_gesicht_erzeugt_keine_gesichts_auflage(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    angebot.vereinbarung_setzen(store, p["id"], "gesicht", "mit Gesicht")
+    d = drehs.anlegen(store, "2026-09-01", "Test", partner_ids=[p["id"]])
+    schluessel = [a["schluessel"] for a in angebot.auflagen_fuer_dreh(store, d)]
+    assert "gesicht" not in schluessel
+
+
+def test_veroeffentlichung_blockiert_bis_auflagen_bestaetigt(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    _voll_vetten(store, p["id"])
+    d = drehs.anlegen(store, "2026-09-01", "Test", partner_ids=[p["id"]])
+    drehs.status_setzen(store, d["id"], "gedreht")
+    drehs.status_setzen(store, d["id"], "geschnitten")
+
+    with pytest.raises(ValueError, match="Auflagen sind noch nicht bestätigt"):
+        drehs.status_setzen(store, d["id"], "veröffentlicht")
+    assert d["status"] == "geschnitten"
+
+    _alle_auflagen_bestaetigen(store, d["id"])
+    drehs.status_setzen(store, d["id"], "veröffentlicht")
+    assert d["status"] == "veröffentlicht"
+
+
+def test_eine_offene_auflage_genuegt_zum_blockieren(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    _voll_vetten(store, p["id"])
+    d = drehs.anlegen(store, "2026-09-01", "Test", partner_ids=[p["id"]])
+    drehs.status_setzen(store, d["id"], "gedreht")
+    drehs.status_setzen(store, d["id"], "geschnitten")
+    auflagen = angebot.auflagen_fuer_dreh(store, d)
+    for auflage in auflagen[:-1]:
+        drehs.auflage_bestaetigen(store, d["id"], auflage["schluessel"])
+    with pytest.raises(ValueError, match=auflagen[-1]["text"][:25]):
+        drehs.status_setzen(store, d["id"], "veröffentlicht")
+
+
+def test_solo_dreh_erbt_auflagen_aus_dem_standard(store):
+    d = drehs.anlegen(store, "2026-09-01", "Solo")
+    schluessel = [a["schluessel"] for a in angebot.auflagen_fuer_dreh(store, d)]
+    assert "wasserzeichen" in schluessel
+    assert "metadaten_entfernt" in schluessel
+    # Ohne Partnerin ergeben partnerbezogene Auflagen keinen Sinn.
+    assert "sichtungsrecht" not in schluessel
+    assert "gesicht" not in schluessel
+    assert "kuenstlername_ihrs" not in schluessel
+
+
+def test_auflage_zweier_partnerinnen_wird_zusammengefuehrt(store):
+    a = partner_mod.anlegen(store, "Model_A")
+    b = partner_mod.anlegen(store, "Model_B")
+    d = drehs.anlegen(store, "2026-09-01", "Test", partner_ids=[a["id"], b["id"]])
+    gesicht = [x for x in angebot.auflagen_fuer_dreh(store, d) if x["schluessel"] == "gesicht"]
+    assert len(gesicht) == 1
+    assert set(gesicht[0]["fuer"]) == {"Model_A", "Model_B"}
+
+
+def test_unbekannte_auflage_wird_abgelehnt(store):
+    d = drehs.anlegen(store, "2026-09-01", "Solo")
+    with pytest.raises(ValueError, match="keine Auflage"):
+        drehs.auflage_bestaetigen(store, d["id"], "gibtsnicht")
+
+
+def test_auflagen_marker_folgt_dem_aktuellen_wert(store):
+    nach_schluessel = {e["schluessel"]: e for e in angebot.katalog(store)}
+    assert nach_schluessel["gesicht"]["erzeugt_auflage"]        # "ohne Gesicht"
+    assert not nach_schluessel["stimme"]["erzeugt_auflage"]     # "unverändert"
+    assert not nach_schluessel["merkmale_abdecken"]["erzeugt_auflage"]
+
+    angebot.standard_setzen(store, "stimme", "verzerrt")
+    angebot.standard_setzen(store, "gesicht", "mit Gesicht")
+    nach_schluessel = {e["schluessel"]: e for e in angebot.katalog(store)}
+    assert nach_schluessel["stimme"]["erzeugt_auflage"]
+    assert not nach_schluessel["gesicht"]["erzeugt_auflage"]
+
+
+def test_angebotsblatt_enthaelt_die_zusagen(store):
+    text = angebot.angebotsblatt(store)
+    assert "Begleitperson darf mitkommen" in text
+    assert "Gesicht im Bild: ohne Gesicht" in text
+    # Abgeschaltete Ja/Nein-Zusagen tauchen nicht auf.
+    assert "Exklusivität verlangt" not in text
+
+
+# --- Persona --------------------------------------------------------------
+
+def test_steckbrief_und_identitaet(store):
+    persona.steckbrief_setzen(store, "nische", "Amateur, echtes Paar")
+    persona.identitaet_setzen(store, "wasserzeichen", "@testname")
+    assert persona.steckbrief(store)["nische"] == "Amateur, echtes Paar"
+    assert persona.identitaet(store)["wasserzeichen"] == "@testname"
+
+
+def test_unbekanntes_feld_wird_abgelehnt(store):
+    with pytest.raises(ValueError, match="Unbekanntes Steckbrief-Feld"):
+        persona.steckbrief_setzen(store, "quatsch", "x")
+
+
+def test_namenskandidat_mit_vergebenem_handle_ist_nicht_waehlbar(store):
+    kanaele.anlegen(store, "OnlyFans", zweck="Paid-Plattform")
+    kanaele.anlegen(store, "X/Twitter", zweck="NSFW-Reichweite")
+    k = persona.name_vorschlagen(store, "TestName")
+    persona.name_pruefung_setzen(store, k["id"], "OnlyFans", "frei")
+    persona.name_pruefung_setzen(store, k["id"], "X/Twitter", "vergeben")
+
+    with pytest.raises(ValueError, match="vergeben"):
+        persona.name_waehlen(store, k["id"])
+
+
+def test_name_waehlen_setzt_kuenstlername_und_wasserzeichen(store):
+    kanaele.anlegen(store, "OnlyFans", zweck="Paid-Plattform")
+    k = persona.name_vorschlagen(store, "TestName")
+    persona.name_pruefung_setzen(store, k["id"], "OnlyFans", "frei")
+    persona.name_waehlen(store, k["id"])
+
+    assert store.laden()["projekt"]["kuenstlername"] == "TestName"
+    assert persona.identitaet(store)["wasserzeichen"] == "TestName"
+    assert persona.namensuebersicht(store)[0]["favorit"]
+
+
+def test_doppelter_namenskandidat_wird_abgelehnt(store):
+    persona.name_vorschlagen(store, "TestName")
+    with pytest.raises(ValueError, match="bereits auf der Liste"):
+        persona.name_vorschlagen(store, "testname")
+
+
+def test_bio_haelt_das_zeichenlimit_ein(store):
+    store.laden()["projekt"]["kuenstlername"] = "TestName"
+    persona.steckbrief_setzen(store, "nische", "x" * 200)
+    persona.steckbrief_setzen(store, "alleinstellung", "y" * 200)
+    bio = persona.bio_vorschlag(store, "TikTok")  # 80 Zeichen
+    assert bio["zeichen"] <= 80
+    assert bio["passt"]
+    assert bio["text"].endswith("…")
+
+
+def test_sfw_plattform_bekommt_keine_expliziten_bausteine(store):
+    store.laden()["projekt"]["kuenstlername"] = "TestName"
+    persona.steckbrief_setzen(store, "alleinstellung", "GEHEIMER-EXPLIZITER-TEXT")
+    assert "GEHEIMER" not in persona.bio_vorschlag(store, "Instagram")["text"]
+    assert "GEHEIMER" in persona.bio_vorschlag(store, "OnlyFans")["text"]
+
+
+def test_plattform_ohne_regeln_wird_abgelehnt(store):
+    with pytest.raises(ValueError, match="keine Regeln hinterlegt"):
+        persona.bio_vorschlag(store, "MySpace")
+
+
+def test_fortschritt_zaehlt_offene_punkte(store):
+    leer = persona.fortschritt(store)
+    assert leer["erledigt"] == 0
+    assert "Künstlername ist noch nicht festgelegt" in leer["offen"]
+
+    store.laden()["projekt"]["kuenstlername"] = "TestName"
+    for schluessel, _, _ in persona.STECKBRIEF_FELDER:
+        persona.steckbrief_setzen(store, schluessel, "ausgefüllt")
+    for schluessel, _, _ in persona.IDENTITAET_FELDER:
+        persona.identitaet_setzen(store, schluessel, "ausgefüllt")
+    voll = persona.fortschritt(store)
+    assert voll["anteil"] == 100
+    assert voll["offen"] == []
+
+
+def test_dashboard_warnt_ohne_kuenstlername(store):
+    warnungen = dashboard.warnungen(store, stichtag="2026-08-07")
+    assert any("kein Künstlername" in w["text"] for w in warnungen)
+
+
+def test_dashboard_warnt_bei_offenen_auflagen(store):
+    p = partner_mod.anlegen(store, "Model_A")
+    _voll_vetten(store, p["id"])
+    d = drehs.anlegen(store, "2026-09-01", "Test", partner_ids=[p["id"]])
+    drehs.status_setzen(store, d["id"], "gedreht")
+    drehs.status_setzen(store, d["id"], "geschnitten")
+    warnungen = dashboard.warnungen(store, stichtag="2026-08-07")
+    assert any("offene Auflagen" in w["text"] for w in warnungen)
+
+
+# --- Vorlagen aus echten Daten -------------------------------------------
+
+def test_release_uebernimmt_die_vereinbarung(store):
+    store.laden()["projekt"]["kuenstlername"] = "TestName"
+    p = partner_mod.anlegen(store, "Model_A")
+    angebot.vereinbarung_setzen(store, p["id"], "stimme", "verzerrt")
+    angebot.vereinbarung_setzen(store, p["id"], "merkmale_abdecken", True)
+
+    text = vorlagen.rendern(store, "model-release", partner_id=p["id"])
+    assert "Das Gesicht des Models wird nicht aufgenommen" in text
+    assert "Die Stimme des Models wird verzerrt" in text
+    assert "Tattoos, Narben" in text
+
+
+def test_release_ohne_partnerin_nutzt_den_standard(store):
+    store.laden()["projekt"]["kuenstlername"] = "TestName"
+    angebot.standard_setzen(store, "gesicht", "mit Gesicht")
+    text = vorlagen.rendern(store, "model-release")
+    assert "darf im Material erkennbar sein" in text
+
+
+def test_anzeige_zieht_das_angebot(store):
+    angebot.standard_setzen(store, "zahlung_am_drehtag", True)
+    text = vorlagen.rendern(store, "anzeige")
+    assert "Auszahlung am Drehtag" in text
+
+
+def test_angebotsblatt_vorlage_rendert(store):
+    text = vorlagen.rendern(store, "angebot")
+    assert "Was du selbst entscheidest" in text
+    assert "Gesicht im Bild" in text
+    assert "keine Rechtsberatung" in text
+
+
+def test_wasserzeichen_kommt_aus_der_identitaet(store):
+    store.laden()["projekt"]["kuenstlername"] = "TestName"
+    persona.identitaet_setzen(store, "wasserzeichen", "@marke")
+    assert '"@marke"' in vorlagen.rendern(store, "model-release")
 
 
 # --- Finanzen -------------------------------------------------------------
@@ -390,6 +668,8 @@ def test_bericht_wird_geschrieben(store, tmp_path):
     assert inhalt.startswith("<!doctype html>")
     assert "Testname" in inhalt
     assert "Statusbericht" in inhalt
+    assert "Angebot an Partnerinnen" in inhalt
+    assert "Persona" in inhalt
 
 
 def test_bericht_maskiert_html_sonderzeichen(store, tmp_path):

@@ -16,12 +16,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 
 from creatordock import (
+    angebot,
     dashboard,
     drehs,
     fahrplan,
     finanzen,
     kalender,
     kanaele,
+    persona,
     report,
     seed,
     vorlagen,
@@ -66,6 +68,9 @@ def api_start(_body: dict) -> dict:
         "prioritaeten": list(fahrplan.PRIORITAETEN),
         "zwecke": list(kanaele.ZWECKE),
         "vorlagen": vorlagen.namen(),
+        "angebot_kategorien": list(angebot.KATEGORIEN),
+        "persona_felder": persona.felder(),
+        "pruef_status": list(persona.PRUEF_STATUS),
         "ablage_hinweis": ABLAGE_HINWEIS,
         "datenordner": str(store.ordner),
     }
@@ -176,6 +181,89 @@ def api_dreh_loeschen(body: dict) -> dict:
     _store().loeschen("drehs", body["id"])
     _speichern()
     return api_drehs({})
+
+
+def api_dreh_auflage(body: dict) -> dict:
+    drehs.auflage_bestaetigen(
+        _store(), body["id"], body["schluessel"], bool(body.get("erfuellt", True))
+    )
+    _speichern()
+    return {**api_drehs({}), "lage": dashboard.lagebild(_store())}
+
+
+# Angebot
+
+def api_angebot(body: dict) -> dict:
+    partner_id = body.get("partner_id") or None
+    return {
+        "partner_id": partner_id,
+        "katalog": angebot.katalog(_store(), partner_id),
+        "blatt": angebot.angebotsblatt(_store(), partner_id),
+        "abweichungen": angebot.abweichungen(_store(), partner_id) if partner_id else [],
+    }
+
+
+def api_angebot_setzen(body: dict) -> dict:
+    partner_id = body.get("partner_id") or None
+    if partner_id:
+        angebot.vereinbarung_setzen(_store(), partner_id, body["schluessel"], body["wert"])
+    else:
+        angebot.standard_setzen(_store(), body["schluessel"], body["wert"])
+    _speichern()
+    return api_angebot({"partner_id": partner_id})
+
+
+def api_angebot_zuruecksetzen(body: dict) -> dict:
+    partner_id = body["partner_id"]
+    angebot.vereinbarung_zuruecksetzen(_store(), partner_id, body["schluessel"])
+    _speichern()
+    return api_angebot({"partner_id": partner_id})
+
+
+# Persona
+
+def api_persona(_body: dict) -> dict:
+    store = _store()
+    return {
+        "steckbrief": persona.steckbrief(store),
+        "identitaet": persona.identitaet(store),
+        "namen": persona.namensuebersicht(store),
+        "bios": persona.alle_bios(store),
+        "fortschritt": persona.fortschritt(store),
+    }
+
+
+def api_persona_setzen(body: dict) -> dict:
+    if body.get("bereich") == "identitaet":
+        persona.identitaet_setzen(_store(), body["schluessel"], body.get("wert", ""))
+    else:
+        persona.steckbrief_setzen(_store(), body["schluessel"], body.get("wert", ""))
+    _speichern()
+    return api_persona({})
+
+
+def api_name_vorschlagen(body: dict) -> dict:
+    persona.name_vorschlagen(_store(), body.get("name", ""))
+    _speichern()
+    return api_persona({})
+
+
+def api_name_pruefung(body: dict) -> dict:
+    persona.name_pruefung_setzen(_store(), body["id"], body["plattform"], body["status"])
+    _speichern()
+    return api_persona({})
+
+
+def api_name_waehlen(body: dict) -> dict:
+    persona.name_waehlen(_store(), body["id"])
+    _speichern()
+    return {**api_persona({}), "lage": dashboard.lagebild(_store())}
+
+
+def api_name_loeschen(body: dict) -> dict:
+    _store().loeschen("namenskandidaten", body["id"])
+    _speichern()
+    return api_persona({})
 
 
 # Kalender
@@ -310,9 +398,11 @@ def api_aufgabe_status(body: dict) -> dict:
 # Vorlagen und Bericht
 
 def api_vorlage(body: dict) -> dict:
+    partner_id = body.get("partner_id") or None
     return {
         "schluessel": body.get("schluessel"),
-        "text": vorlagen.rendern(_store(), body.get("schluessel", "")),
+        "partner_id": partner_id,
+        "text": vorlagen.rendern(_store(), body.get("schluessel", ""), partner_id=partner_id),
     }
 
 
@@ -337,6 +427,16 @@ _POST_ROUTES = {
     "/api/dreh/anlegen": api_dreh_anlegen,
     "/api/dreh/status": api_dreh_status,
     "/api/dreh/loeschen": api_dreh_loeschen,
+    "/api/dreh/auflage": api_dreh_auflage,
+    "/api/angebot": api_angebot,
+    "/api/angebot/setzen": api_angebot_setzen,
+    "/api/angebot/zuruecksetzen": api_angebot_zuruecksetzen,
+    "/api/persona": api_persona,
+    "/api/persona/setzen": api_persona_setzen,
+    "/api/name/vorschlagen": api_name_vorschlagen,
+    "/api/name/pruefung": api_name_pruefung,
+    "/api/name/waehlen": api_name_waehlen,
+    "/api/name/loeschen": api_name_loeschen,
     "/api/kalender": api_kalender,
     "/api/kalender/planen": api_kalender_planen,
     "/api/kalender/slot": api_kalender_slot,

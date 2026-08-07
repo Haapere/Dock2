@@ -144,6 +144,60 @@ details summary{cursor:pointer;font-size:.85rem;color:var(--leise)}
     </div>
   </section>
 
+  <section id="tab-angebot">
+    <div class="karte">
+      <h2>Was du zusagst</h2>
+      <div class="hinweisbox">Das hier ist dein Verkaufsargument gegenüber Partnerinnen — und
+        gleichzeitig eine Selbstbindung: Punkte mit dem Vermerk <b>Auflage</b> werden vor der
+        Veröffentlichung eines Drehs abgefragt. Ohne Bestätigung geht nichts online.</div>
+      <div class="feldreihe">
+        <div><label>Gilt für</label><select id="angPartner" onchange="ladeAngebot()"></select></div>
+      </div>
+      <div id="angAbweichungen"></div>
+      <div id="angKatalog"></div>
+    </div>
+    <div class="karte">
+      <h2>Angebotsblatt</h2>
+      <p class="leer">Genau dieser Text geht an die Partnerin — auch in der Anzeige
+        und im Model-Release.</p>
+      <pre id="angBlatt"></pre>
+    </div>
+  </section>
+
+  <section id="tab-persona">
+    <div class="karte">
+      <h2>Künstlername</h2>
+      <div class="hinweisbox">Der Name muss auf <b>allen</b> Zielplattformen frei sein — sonst
+        zerreißt die Marke. Die App prüft nichts online: du prüfst von Hand und trägst hier ein,
+        was du gefunden hast.</div>
+      <div class="feldreihe">
+        <div><label>Kandidat</label><input id="nName" placeholder="z. B. NachtSchicht"></div>
+        <div><button class="knopf" onclick="nameVorschlagen()">Aufnehmen</button></div>
+      </div>
+      <div id="namenListe"></div>
+    </div>
+    <div class="karte">
+      <h2>Steckbrief</h2>
+      <p class="leer">Ohne scharfe Nische verpufft jede Reichweite. Diese Felder speisen
+        die Profiltexte weiter unten.</p>
+      <div id="steckbriefFelder"></div>
+    </div>
+    <div class="karte">
+      <h2>Visuelle Identität</h2>
+      <div id="identitaetFelder"></div>
+    </div>
+    <div class="karte">
+      <h2>Profiltexte je Plattform</h2>
+      <p class="leer">Aus dem Steckbrief erzeugt, auf das echte Zeichenlimit gekürzt.
+        SFW-Kanäle bekommen bewusst keine expliziten Bausteine.</p>
+      <div id="bioListe"></div>
+    </div>
+    <div class="karte">
+      <h2>Stufenplan</h2>
+      <div id="phasenListe"></div>
+    </div>
+  </section>
+
   <section id="tab-kalender">
     <div class="karte">
       <h2>Rhythmus planen</h2>
@@ -257,6 +311,8 @@ details summary{cursor:pointer;font-size:.85rem;color:var(--leise)}
         einmalig anwaltlich prüfen lassen.</div>
       <div class="feldreihe">
         <div><label>Vorlage</label><select id="vAuswahl" onchange="ladeVorlage()"></select></div>
+        <div><label>Für Partnerin (setzt ihre Vereinbarung ein)</label>
+          <select id="vPartner" onchange="ladeVorlage()"></select></div>
         <div><button class="knopf leise" onclick="vorlageKopieren()">In Zwischenablage</button></div>
       </div>
       <pre id="vorlageText">Bitte eine Vorlage auswählen.</pre>
@@ -300,9 +356,10 @@ details summary{cursor:pointer;font-size:.85rem;color:var(--leise)}
 <script>
 "use strict";
 const TABS = [
-  ["uebersicht","Übersicht"], ["partnerinnen","Partnerinnen"], ["drehs","Drehs"],
-  ["kalender","Kalender"], ["finanzen","Finanzen"], ["kanaele","Kanäle"],
-  ["fahrplan","Fahrplan"], ["vorlagen","Vorlagen"], ["einstellungen","Einstellungen"],
+  ["uebersicht","Übersicht"], ["persona","Persona"], ["angebot","Angebot"],
+  ["partnerinnen","Partnerinnen"], ["drehs","Drehs"], ["kalender","Kalender"],
+  ["finanzen","Finanzen"], ["kanaele","Kanäle"], ["fahrplan","Fahrplan"],
+  ["vorlagen","Vorlagen"], ["einstellungen","Einstellungen"],
 ];
 let START = null;
 
@@ -351,7 +408,7 @@ function tabZeigen(schluessel, knopf){
   const lader = {
     uebersicht: ladeLage, partnerinnen: ladePartnerinnen, drehs: ladeDrehs,
     kalender: ladeKalender, finanzen: ladeFinanzen, kanaele: ladeKanaele,
-    fahrplan: ladeFahrplan,
+    fahrplan: ladeFahrplan, angebot: ladeAngebot, persona: ladePersona,
   }[schluessel];
   if(lader) lader();
 }
@@ -508,6 +565,18 @@ function zeichneDrehs(zeilen){
     const freigabe = z.gesperrt ? '<span class="pill krit">gesperrt</span>'
       : z.startklar ? '<span class="pill ok">frei</span>'
       : `<span class="pill warn" title="${esc(z.blockiert_durch.map(b=>b.pseudonym+": "+b.gruende.join(", ")).join(" | "))}">blockiert</span>`;
+    const auflagen = z.auflagen.length ? `<tr><td colspan="7" style="padding-top:0">
+      <details ${z.auflagen_offen.length && z.status==="geschnitten" ? "open" : ""}>
+        <summary>Auflagen vor Veröffentlichung: ${z.auflagen.length - z.auflagen_offen.length}
+          von ${z.auflagen.length} bestätigt${z.auflagen_offen.length
+            ? ' <span class="pill warn">offen</span>' : ' <span class="pill ok">vollständig</span>'}</summary>
+        <div class="gateliste">${z.auflagen.map(a=>`
+          <label class="gate"><input type="checkbox" ${a.bestaetigt?"checked":""}
+            onchange="auflageSetzen('${z.id}','${a.schluessel}',this.checked)">
+            <span>${esc(a.text)}</span>
+            ${a.fuer.length?`<span class="erkl">zugesagt an ${esc(a.fuer.join(", "))}</span>`:""}
+          </label>`).join("")}</div>
+      </details></td></tr>` : "";
     return `<tr>
       <td>${esc(z.datum)}</td><td>${esc(z.titel)}</td>
       <td>${esc(z.partner.join(", ") || "solo")}</td>
@@ -515,17 +584,155 @@ function zeichneDrehs(zeilen){
       <td><select onchange="drehStatus('${z.id}',this.value)">${optionen}</select></td>
       <td>${freigabe}</td>
       <td><button class="knopf leise klein" onclick="drehLoeschen('${z.id}')">löschen</button></td>
-    </tr>`;
+    </tr>${auflagen}`;
   }).join("");
 }
 async function drehStatus(id, status){
   const ergebnis = await ruf("/api/dreh/status", {id, status});
   if(ergebnis) zeichneDrehs(ergebnis.zeilen); else ladeDrehs();
 }
+async function auflageSetzen(id, schluessel, erfuellt){
+  const ergebnis = await ruf("/api/dreh/auflage", {id, schluessel, erfuellt});
+  if(ergebnis) zeichneDrehs(ergebnis.zeilen); else ladeDrehs();
+}
 async function drehLoeschen(id){
   if(!confirm("Diesen Dreh löschen?")) return;
   const ergebnis = await ruf("/api/dreh/loeschen", {id});
   if(ergebnis) zeichneDrehs(ergebnis.zeilen);
+}
+
+// --- Angebot ---
+async function ladeAngebot(){
+  const p = await ruf("/api/partnerinnen");
+  if(p){
+    const bisher = $("angPartner").value;
+    $("angPartner").innerHTML = '<option value="">Standard für alle</option>' +
+      p.zeilen.map(z=>`<option value="${esc(z.id)}">nur ${esc(z.pseudonym)}</option>`).join("");
+    if(bisher) $("angPartner").value = bisher;
+  }
+  const ergebnis = await ruf("/api/angebot", {partner_id: $("angPartner").value});
+  if(ergebnis) zeichneAngebot(ergebnis);
+}
+
+function zeichneAngebot(a){
+  $("angBlatt").textContent = a.blatt;
+  $("angAbweichungen").innerHTML = a.abweichungen.length
+    ? `<div class="meldung"><b>Abweichend vom Standard</b>` + a.abweichungen.map(w=>
+        `${esc(w.label)}: ${esc(String(w.vereinbart))} statt ${esc(String(w.standard))}`
+      ).join(" · ") + "</div>"
+    : "";
+
+  const nachKategorie = {};
+  a.katalog.forEach(o=>{ (nachKategorie[o.kategorie] ||= []).push(o); });
+  $("angKatalog").innerHTML = START.angebot_kategorien.map(kat=>{
+    const posten = nachKategorie[kat] || [];
+    if(!posten.length) return "";
+    return `<h3>${esc(kat)}</h3><div class="gateliste">` + posten.map(o=>{
+      const marken = (o.erzeugt_auflage ? '<span class="pill warn">Auflage</span> ' : "")
+        + (o.wer==="wahl" ? '<span class="pill">sie wählt</span> ' : "")
+        + (o.abweichend ? '<span class="pill krit">abweichend</span> ' : "");
+      const feld = o.typ==="ja_nein"
+        ? `<input type="checkbox" ${o.wert?"checked":""}
+             onchange="angebotSetzen('${o.schluessel}',this.checked)">`
+        : `<select style="width:auto" onchange="angebotSetzen('${o.schluessel}',this.value)">`
+          + o.optionen.map(w=>`<option ${w===o.wert?"selected":""}>${esc(w)}</option>`).join("")
+          + "</select>";
+      const zuruck = (a.partner_id && o.abweichend)
+        ? ` <button class="knopf leise klein" onclick="angebotZuruecksetzen('${o.schluessel}')">Standard</button>`
+        : "";
+      return `<div class="gate">${feld}<span><b>${esc(o.label)}</b> ${marken}
+        <span class="erkl">${esc(o.erklaerung)}</span></span>${zuruck}</div>`;
+    }).join("") + "</div>";
+  }).join("");
+}
+
+async function angebotSetzen(schluessel, wert){
+  const ergebnis = await ruf("/api/angebot/setzen",
+    {partner_id: $("angPartner").value, schluessel, wert});
+  if(ergebnis) zeichneAngebot(ergebnis); else ladeAngebot();
+}
+async function angebotZuruecksetzen(schluessel){
+  const ergebnis = await ruf("/api/angebot/zuruecksetzen",
+    {partner_id: $("angPartner").value, schluessel});
+  if(ergebnis) zeichneAngebot(ergebnis);
+}
+
+// --- Persona ---
+async function ladePersona(){
+  const ergebnis = await ruf("/api/persona");
+  if(ergebnis) zeichnePersona(ergebnis);
+}
+
+function zeichnePersona(p){
+  const felderHtml = (liste, werte, bereich) => liste.map(f=>`
+    <div style="margin-bottom:.6rem">
+      <label>${esc(f.label)} — <span style="text-transform:none">${esc(f.erklaerung)}</span></label>
+      <input value="${esc(werte[f.schluessel]||"")}"
+             onchange="personaSetzen('${bereich}','${f.schluessel}',this.value)">
+    </div>`).join("");
+  $("steckbriefFelder").innerHTML =
+    felderHtml(START.persona_felder.steckbrief, p.steckbrief, "steckbrief");
+  $("identitaetFelder").innerHTML =
+    felderHtml(START.persona_felder.identitaet, p.identitaet, "identitaet");
+
+  $("namenListe").innerHTML = p.namen.length ? p.namen.map(k=>{
+    const pruefungen = Object.entries(k.geprueft||{}).map(([plattform,status])=>{
+      const optionen = START.pruef_status.map(s=>
+        `<option value="${esc(s)}" ${s===status?"selected":""}>${esc(s)}</option>`).join("");
+      return `<tr><td>${esc(plattform)}</td><td><select
+        onchange="namePruefung('${k.id}','${esc(plattform)}',this.value)">${optionen}</select></td></tr>`;
+    }).join("");
+    return `<div class="karte" style="margin-top:.7rem">
+      <h2>${esc(k.name)} ${k.favorit?'<span class="pill ok">gewählt</span>':""}</h2>
+      <div style="font-size:.8rem;color:var(--leise)">
+        frei ${k.frei} · vergeben ${k.vergeben} · offen ${k.offen}</div>
+      <div class="tabellenrahmen"><table><tbody>${pruefungen}</tbody></table></div>
+      <div style="margin-top:.6rem;display:flex;gap:.4rem">
+        <button class="knopf klein" ${k.waehlbar?"":"disabled"}
+          title="${k.waehlbar?"":"Erst überall als frei bestätigen"}"
+          onclick="nameWaehlen('${k.id}')">Als Künstlername wählen</button>
+        <button class="knopf leise klein" onclick="nameLoeschen('${k.id}')">löschen</button>
+      </div></div>`;
+  }).join("") : '<p class="leer">Noch keine Kandidaten.</p>';
+
+  $("bioListe").innerHTML = p.bios.map(b=>`
+    <div style="margin-bottom:.9rem">
+      <div style="font-size:.85rem"><b>${esc(b.plattform)}</b>
+        <span class="pill ${b.passt?"ok":"krit"}">${b.zeichen}/${b.limit}</span>
+        <span class="pill">${esc(b.inhalt)}</span></div>
+      <pre style="margin:.3rem 0">${esc(b.text)}</pre>
+      ${b.hinweise.map(h=>`<div class="meldung">${esc(h)}</div>`).join("")}
+    </div>`).join("");
+
+  $("phasenListe").innerHTML = START.persona_felder.phasen.map(ph=>`
+    <h3>${esc(ph.name)} · ${esc(ph.zeitraum)}</h3>
+    <ul style="margin:.2rem 0 .8rem 1.1rem;font-size:.87rem">
+      ${ph.schritte.map(s=>`<li>${esc(s)}</li>`).join("")}</ul>`).join("");
+
+  $("kopfSub").textContent = (p.fortschritt.kuenstlername || "ohne Künstlername")
+    + ` · Identität ${p.fortschritt.anteil} %`;
+}
+
+async function personaSetzen(bereich, schluessel, wert){
+  const ergebnis = await ruf("/api/persona/setzen", {bereich, schluessel, wert});
+  if(ergebnis) zeichnePersona(ergebnis);
+}
+async function nameVorschlagen(){
+  const ergebnis = await ruf("/api/name/vorschlagen", {name: $("nName").value});
+  if(ergebnis){ $("nName").value = ""; zeichnePersona(ergebnis); }
+}
+async function namePruefung(id, plattform, status){
+  const ergebnis = await ruf("/api/name/pruefung", {id, plattform, status});
+  if(ergebnis) zeichnePersona(ergebnis);
+}
+async function nameWaehlen(id){
+  const ergebnis = await ruf("/api/name/waehlen", {id});
+  if(ergebnis){ zeichnePersona(ergebnis); fehler("Künstlername übernommen."); }
+}
+async function nameLoeschen(id){
+  if(!confirm("Kandidat löschen?")) return;
+  const ergebnis = await ruf("/api/name/loeschen", {id});
+  if(ergebnis) zeichnePersona(ergebnis);
 }
 
 // --- Kalender ---
@@ -712,8 +919,15 @@ async function aufgabeStatus(id, status){
 // --- Vorlagen ---
 async function ladeVorlage(){
   const schluessel = $("vAuswahl").value;
-  if(!schluessel) return;
-  const ergebnis = await ruf("/api/vorlage", {schluessel});
+  const p = await ruf("/api/partnerinnen");
+  if(p){
+    const bisher = $("vPartner").value;
+    $("vPartner").innerHTML = '<option value="">Standardangebot</option>' +
+      p.zeilen.map(z=>`<option value="${esc(z.id)}">${esc(z.pseudonym)}</option>`).join("");
+    if(bisher) $("vPartner").value = bisher;
+  }
+  if(!schluessel){ $("vorlageText").textContent = "Bitte eine Vorlage auswählen."; return; }
+  const ergebnis = await ruf("/api/vorlage", {schluessel, partner_id: $("vPartner").value});
   if(ergebnis) $("vorlageText").textContent = ergebnis.text;
 }
 function vorlageKopieren(){

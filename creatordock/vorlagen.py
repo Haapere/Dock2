@@ -56,31 +56,36 @@ Plattformen zu veröffentlichen und zu verwerten:
 Nicht eingeräumt werden Rechte zur Weitergabe an Dritte, zum Weiterverkauf des
 Rohmaterials und zur Nutzung außerhalb der genannten Plattformen.
 
-**Gesichtszeigung:** [ ] mit Gesicht   [ ] ohne Gesicht / unkenntlich
+**Vereinbarte Anonymität:**
+
+{anonymitaet}
+
 **Wasserzeichen:** Das Material wird durchgängig mit dem Wasserzeichen
-"{kuenstlername}" versehen.
+"{wasserzeichen}" versehen.
 
 ## 4. Laufzeit und Exklusivität
 
-Die Rechteeinräumung gilt ab Unterzeichnung für ____ Monate / unbefristet.
-Exklusivität: [ ] ja   [ ] nein   Umfang: ______________________
+Die Rechteeinräumung gilt ab Unterzeichnung für {laufzeit}.
+Exklusivität: {exklusivitaet}
 
 ## 5. Vergütung
 
-[ ] Festgage in Höhe von ________ € , zahlbar bis zum ______________
-[ ] Umsatzbeteiligung in Höhe von ____ % , abgerechnet ______________
-[ ] Kombination: ______________________
+Vergütungsmodell: **{verguetungsmodell}**
 
-Die Vergütung ist unabhängig davon geschuldet, ob und wie erfolgreich das
-Material veröffentlicht wird.
+[ ] Festgage in Höhe von ________ € , zahlbar {zahlungszeitpunkt}
+[ ] Umsatzbeteiligung in Höhe von ____ % , abgerechnet ______________
+
+{verguetung_zusagen}
 
 ## 6. Widerruf
 
-Das Model kann die Einwilligung innerhalb von ____ Tagen nach dem Dreh ohne
-Angabe von Gründen in Textform widerrufen. Nach einem Widerruf wird das
-Material innerhalb von {widerruf_frist} Tagen von allen Plattformen entfernt,
-nicht weiter verwertet und auf Verlangen gelöscht; die Löschung wird
-schriftlich bestätigt. Bereits ausgezahlte Vergütung bleibt unberührt.
+Das Model kann die Einwilligung {widerrufsfrist} nach dem Dreh ohne Angabe von
+Gründen in Textform widerrufen. Nach einem Widerruf wird das Material
+innerhalb von {widerruf_frist} Tagen von allen Plattformen entfernt, nicht
+weiter verwertet und auf Verlangen gelöscht. Bereits ausgezahlte Vergütung
+bleibt unberührt.
+
+{nach_dreh_zusagen}
 
 Darüber hinaus kann das Model einer weiteren Verwertung jederzeit mit Wirkung
 für die Zukunft widersprechen.
@@ -127,6 +132,10 @@ keine automatisierten Kontaktaufnahmen. Wer sich meldet, meldet sich selbst.
 **Wen ich suche:** Volljährige Darstellerinnen (18+), die Erfahrung mitbringen
 oder klar wissen, worauf sie sich einlassen.
 
+**Was ich anbiete:**
+
+{angebot}
+
 **Wie der Ablauf aussieht — ohne Ausnahme:**
 
 1. Schriftlicher Kontakt, in Ruhe. Kein Druck, keine Fristen von meiner Seite.
@@ -136,16 +145,6 @@ oder klar wissen, worauf sie sich einlassen.
    erst danach wird ein Termin vereinbart.
 5. Gegenseitiger Austausch aktueller STI-Nachweise.
 6. Erst dann der Dreh.
-
-**Was ich zusage:**
-
-- Vergütung: {verguetung}
-- Zahlung zum vereinbarten Termin, unabhängig vom Erfolg der Veröffentlichung.
-- Feste Grenzen werden vorher schriftlich festgehalten und eingehalten.
-- Jederzeitiges Abbrechen am Set, ohne Diskussion und ohne Rückforderung.
-- Widerrufsrecht nach dem Dreh, Frist steht im Vertrag.
-- Veröffentlichung ausschließlich auf den vereinbarten Plattformen.
-- Auf Wunsch ohne Gesicht.
 
 **Kontakt:** {kontakt}
 
@@ -171,15 +170,13 @@ irgendetwas gedreht wird:
 4. Wir tauschen aktuelle STI-Nachweise aus.
 5. Erst wenn all das steht, machen wir einen Termin.
 
-Was du wissen solltest:
+Das ist mein Angebot — jeder Punkt steht so auch im Vertrag:
 
-- Was gedreht wird und was nicht, legen wir vorher gemeinsam schriftlich fest.
-- Deine Grenzen stehen im Vertrag und gelten am Set ohne Diskussion.
-- Du kannst jederzeit abbrechen. Auch mittendrin, auch ohne Begründung.
-- Nach dem Dreh hast du eine Widerrufsfrist, in der du alles zurückziehen
-  kannst.
-- Veröffentlicht wird nur auf den Plattformen, die im Vertrag stehen.
-- Vergütung: {verguetung}
+{angebot}
+
+Was davon dir wichtig ist und was nicht, besprechen wir. Einiges kannst du
+frei wählen: ob dein Gesicht zu sehen ist, ob deine Stimme drauf ist, ob du
+den fertigen Schnitt vorher freigibst.
 
 Wenn das für dich passt, schlag mir gern zwei, drei Zeiten für ein Gespräch
 vor. Wenn nicht, ist das auch völlig in Ordnung — dann alles Gute.
@@ -228,7 +225,40 @@ DREHTAG = """\
 """
 
 
+ANGEBOTSBLATT = """\
+# Was ich zusage — {kuenstlername}
+
+Dieses Blatt bekommst du vor dem Kennenlerngespräch, damit du in Ruhe
+entscheiden kannst. Jeder Punkt hier steht später wortgleich im Vertrag.
+
+{angebot}
+
+## Was du selbst entscheidest
+
+{wahlmoeglichkeiten}
+
+## Was ich im Gegenzug erwarte
+
+- Volljährigkeit, nachgewiesen durch ein amtliches Lichtbilddokument.
+- Aktueller STI-Testnachweis, gegenseitig.
+- Verlässlichkeit bei Terminen — sag lieber früh ab als gar nicht.
+- Dass du sagst, wenn dir etwas nicht passt. Sofort, nicht hinterher.
+
+## Woran du erkennst, dass etwas nicht stimmt
+
+Falls du jemals bei mir oder bei jemand anderem Folgendes erlebst, brich ab:
+Druck, den Vertrag „gleich hier“ zu unterschreiben; kein Ausweis auf der
+Gegenseite; Nachverhandeln von Grenzen am Set; keine Vergütung vor oder am
+Drehtag; Weigerung, eine Begleitperson zuzulassen.
+
+---
+
+{rechtshinweis}
+"""
+
+
 VORLAGEN = {
+    "angebot": ("Angebotsblatt für Partnerinnen", ANGEBOTSBLATT),
     "model-release": ("Model-Release / Einwilligung", MODEL_RELEASE),
     "anzeige": ("Anzeige zur Partnerinnen-Suche", ANZEIGE),
     "erstkontakt": ("Antwort auf eine Bewerbung", ERSTKONTAKT),
@@ -240,28 +270,126 @@ def namen() -> list[dict]:
     return [{"schluessel": k, "titel": t} for k, (t, _) in VORLAGEN.items()]
 
 
-def rendern(store: Store, schluessel: str, **zusatz) -> str:
-    """Füllt eine Vorlage mit den Projektdaten."""
+def rendern(store: Store, schluessel: str, partner_id: str | None = None, **zusatz) -> str:
+    """Füllt eine Vorlage mit den Projektdaten.
+
+    Mit ``partner_id`` wird die individuelle Vereinbarung dieser Partnerin
+    eingesetzt (gesichtslos, Sichtungsrecht, Vergütungsmodell) statt des
+    Standardangebots — der Model-Release passt dann exakt zu dem, was ihr
+    besprochen habt.
+    """
     if schluessel not in VORLAGEN:
         raise ValueError(
             f"Unbekannte Vorlage '{schluessel}'. Möglich: {', '.join(VORLAGEN)}"
         )
+    from creatordock import angebot as angebot_mod
+    from creatordock import persona as persona_mod
     from creatordock.partnerinnen import WIDERRUF_FRIST_TAGE
 
     projekt = store.laden()["projekt"]
+    konditionen = (
+        angebot_mod.vereinbarung(store, partner_id)
+        if partner_id
+        else angebot_mod.standard(store)
+    )
     kanaele = [
         k.get("plattform", "")
         for k in store.sammlung("kanaele")
         if k.get("zweck") in ("Paid-Plattform", "NSFW-Reichweite")
     ]
+    kuenstlername = projekt.get("kuenstlername") or "[Künstlername eintragen]"
+    wasserzeichen = persona_mod.identitaet(store).get("wasserzeichen") or kuenstlername
+
     werte = {
-        "kuenstlername": projekt.get("kuenstlername") or "[Künstlername eintragen]",
+        "kuenstlername": kuenstlername,
+        "wasserzeichen": wasserzeichen,
         "plattformen": ", ".join(kanaele) or "OnlyFans, Pornhub",
         "widerruf_frist": WIDERRUF_FRIST_TAGE,
-        "verguetung": "nach Absprache — Festgage oder Umsatzbeteiligung",
         "kontakt": projekt.get("kontakt") or "[Projekt-Mailadresse eintragen]",
         "rechtshinweis": f"> {RECHTSHINWEIS}",
         "datum": date.today().isoformat(),
+        "angebot": angebot_mod.angebotsblatt(store, partner_id),
+        "wahlmoeglichkeiten": _wahlmoeglichkeiten(angebot_mod),
+        "anonymitaet": _anonymitaet(konditionen),
+        "laufzeit": str(konditionen.get("laufzeit", "24 Monate")),
+        "exklusivitaet": "ja" if konditionen.get("exklusivitaet") else "nein",
+        "verguetungsmodell": str(konditionen.get("modell", "Festgage")),
+        "zahlungszeitpunkt": (
+            "am Drehtag" if konditionen.get("zahlung_am_drehtag") else "bis zum ____________"
+        ),
+        "widerrufsfrist": _widerrufsfrist(konditionen),
+        "verguetung_zusagen": _zusagen(
+            konditionen,
+            [
+                ("erfolgsunabhaengig", "Die Vergütung ist unabhängig davon geschuldet, ob "
+                                       "und wie erfolgreich das Material veröffentlicht wird."),
+                ("reisekosten", "Reisekosten werden gegen Nachweis erstattet."),
+            ],
+        ),
+        "nach_dreh_zusagen": _zusagen(
+            konditionen,
+            [
+                ("sichtungsrecht", "Vor der Veröffentlichung erhält das Model den fertigen "
+                                   "Schnitt zur Sichtung und kann einzelne Szenen streichen lassen."),
+                ("loeschbestaetigung", "Nach einem Widerruf wird die vollständige Löschung "
+                                       "schriftlich bestätigt."),
+                ("kopie_material", "Das Model erhält auf Wunsch eine Kopie des eigenen Materials."),
+            ],
+        ),
     }
     werte.update({k: v for k, v in zusatz.items() if v})
     return VORLAGEN[schluessel][1].format(**werte)
+
+
+def _anonymitaet(konditionen: dict) -> str:
+    """Formuliert die Anonymitätszusagen als Vertragstext."""
+    gesicht = konditionen.get("gesicht", "ohne Gesicht")
+    zeilen = {
+        "mit Gesicht": "Das Gesicht des Models darf im Material erkennbar sein.",
+        "ohne Gesicht": "Das Gesicht des Models wird nicht aufgenommen. Aufnahmen, "
+                        "auf denen es dennoch erkennbar ist, werden nicht verwertet.",
+        "unkenntlich gemacht": "Das Gesicht des Models wird in der Nachbearbeitung "
+                               "durchgängig unkenntlich gemacht.",
+    }
+    ergebnis = [f"- {zeilen.get(gesicht, zeilen['ohne Gesicht'])}"]
+
+    stimme = konditionen.get("stimme", "unverändert")
+    if stimme == "verzerrt":
+        ergebnis.append("- Die Stimme des Models wird verzerrt.")
+    elif stimme == "kein Ton":
+        ergebnis.append("- Das Material wird ohne Tonspur veröffentlicht.")
+
+    if konditionen.get("merkmale_abdecken"):
+        ergebnis.append(
+            "- Tattoos, Narben und vergleichbare Erkennungsmerkmale werden abgedeckt "
+            "oder in der Nachbearbeitung entfernt."
+        )
+    if konditionen.get("kuenstlername_ihrs"):
+        ergebnis.append(
+            "- Das Model tritt ausschließlich unter seinem Künstlernamen auf. Der "
+            "Klarname erscheint nirgends, auch nicht in Dateinamen oder Beschreibungen."
+        )
+    return "\n".join(ergebnis)
+
+
+def _widerrufsfrist(konditionen: dict) -> str:
+    wert = str(konditionen.get("widerruf_tage", "14 Tage"))
+    return "jederzeit" if wert == "jederzeit" else f"innerhalb von {wert}"
+
+
+def _zusagen(konditionen: dict, punkte: list[tuple[str, str]]) -> str:
+    aktiv = [text for schluessel, text in punkte if konditionen.get(schluessel)]
+    return "\n".join(aktiv) if aktiv else ""
+
+
+def _wahlmoeglichkeiten(angebot_mod) -> str:
+    """Listet auf, was die Partnerin selbst entscheidet."""
+    zeilen = []
+    for option in angebot_mod.KATALOG:
+        if option.wer != "wahl":
+            continue
+        if option.typ == "auswahl":
+            zeilen.append(f"- **{option.label}:** {' / '.join(option.optionen)}")
+        else:
+            zeilen.append(f"- **{option.label}:** ja oder nein")
+    return "\n".join(zeilen)

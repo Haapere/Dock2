@@ -84,18 +84,79 @@ Ein erfasster Widerruf wirkt rückwirkend und automatisch:
 
 Versehentlich erfasst? `Widerruf zurücknehmen` stellt den vorherigen Stand her.
 
+## Das Angebot — und warum es sich selbst durchsetzt
+
+Der Vertrag regelt, was rechtlich gilt. Das **Angebot** ist das, was eine
+Partnerin überhaupt erst zusagen lässt: gesichtslos drehen, Sichtungsrecht vor
+der Veröffentlichung, Begleitperson am Set, Auszahlung am Drehtag.
+
+Es gibt zwei Ebenen:
+
+* **Standardangebot** — was du jeder Partnerin zusagst, einmal konfiguriert.
+* **Vereinbarung** — was eine einzelne Partnerin daraus gewählt hat. Sie
+  überschreibt den Standard punktuell; Abweichungen werden ausgewiesen.
+
+Der entscheidende Teil ist die Durchsetzung. Aus jeder Zusage, die das fertige
+Material betrifft, wird eine **Auflage**:
+
+| Vereinbart | Auflage vor der Veröffentlichung |
+|------------|----------------------------------|
+| Gesicht: ohne Gesicht | Gesicht kommt im gesamten Material nicht vor |
+| Gesicht: unkenntlich gemacht | Gesicht ist durchgängig unkenntlich gemacht |
+| Stimme: verzerrt | Stimme ist verzerrt |
+| Tattoos abdecken | Erkennungsmerkmale sind abgedeckt oder retuschiert |
+| Sichtungsrecht | Partnerin hat den fertigen Schnitt freigegeben |
+| Wasserzeichen | Wasserzeichen ist gesetzt |
+| Metadaten entfernen | GPS und Gerätekennung sind entfernt |
+
+**Solange eine dieser Auflagen nicht bestätigt ist, lässt sich der Dreh nicht
+auf „veröffentlicht" setzen.** Aus dem Versprechen wird eine Sperre. Bei
+Solo-Drehs gelten nur die materialbezogenen Auflagen — Gesicht und
+Sichtungsrecht ergeben ohne Partnerin keinen Sinn.
+
+Das Angebot speist außerdem die Texte: Anzeige, Erstkontakt-Antwort,
+Angebotsblatt und Model-Release werden daraus generiert. Mit
+`--partnerin P1` steht im Release genau das, was ihr besprochen habt — nicht
+ein Standardtext mit Ankreuzkästchen.
+
+## Persona aufbauen
+
+Der Bereich **Persona** macht aus „Künstlername festlegen" einen Ablauf:
+
+* **Namenskandidaten** mit Verfügbarkeitsprüfung je Plattform. Ein Name lässt
+  sich erst wählen, wenn er nirgends als *vergeben* markiert ist — ein Name,
+  der nicht überall frei ist, zerreißt die Marke. Beim Wählen wird er
+  automatisch als Wasserzeichen übernommen.
+* **Steckbrief**: Nische, Zielgruppe, Tonalität, Alleinstellungsmerkmal,
+  Tabus, versprochener Rhythmus.
+* **Visuelle Identität**: Wasserzeichen, Farbwelt, Profilbild-Konzept,
+  Bio-Link.
+* **Profiltexte je Plattform**, aus dem Steckbrief erzeugt und auf das echte
+  Zeichenlimit gekürzt (X 160, Instagram 150, TikTok 80, Reddit 200,
+  Paid-Plattformen 1000). SFW-Kanäle bekommen bewusst keine expliziten
+  Bausteine untergeschoben.
+* **Plattform-Spielregeln**: was wo erlaubt ist und woran Konten typischerweise
+  sterben — Instagram-Sperre wegen Direktlink, Reddit-Bann wegen Sub-Regeln,
+  X-Shadowban ohne Sensibel-Markierung.
+* **Stufenplan** über sechs Wochen: Fundament, Kanäle, Vorrat, Start.
+
+Die App prüft **keine** Handles online und postet nirgends. Sie sagt dir, was
+zu prüfen ist, und hält fest, was du herausgefunden hast.
+
 ## Bereiche
 
 | Bereich | Was drinsteckt |
 |---------|----------------|
-| **Übersicht** | Kennzahlen und die Warnliste: fehlende Freigaben, gesperrte Drehs, abgelaufene Nachweise, überfällige Fristen, drohende Umsatzgrenzen |
+| **Übersicht** | Kennzahlen und die Warnliste: fehlende Freigaben, offene Auflagen, gesperrte Drehs, abgelaufene Nachweise, überfällige Fristen, drohende Umsatzgrenzen |
+| **Persona** | Künstlername, Steckbrief, visuelle Identität, Profiltexte, Stufenplan |
+| **Angebot** | Was du zusagst — als Standard und je Partnerin, mit Durchsetzung |
 | **Partnerinnen** | Onboarding, die sieben Schritte, STI-Gültigkeit, Widerruf |
-| **Drehs** | Produktionspipeline `geplant → gedreht → geschnitten → veröffentlicht` mit Freigabeprüfung |
+| **Drehs** | Produktionspipeline `geplant → gedreht → geschnitten → veröffentlicht` mit Freigabeprüfung und Auflagen-Checkliste |
 | **Kalender** | Redaktionsplan aus festem Rhythmus (Standard: Teaser Mo/Mi/Fr auf X, Paid-Release sonntags) |
 | **Finanzen** | EÜR, Journal mit laufendem Saldo, Monatsübersicht, Steuerrücklage, Kleinunternehmer-Monitor, Ausrüstungsbudget |
 | **Kanäle** | Kanal-Register (Handle, Projekt-Mail, 2FA, Verifizierung) und OPSEC-Checkliste |
 | **Fahrplan** | Aufgaben mit Fristen, überfällige stehen oben |
-| **Vorlagen** | Model-Release, Anzeige, Antwort auf Bewerbungen, Drehtag-Checkliste |
+| **Vorlagen** | Angebotsblatt, Model-Release, Anzeige, Antwort auf Bewerbungen, Drehtag-Checkliste — alle aus den echten Daten erzeugt |
 
 ## Kleinunternehmerregelung
 
@@ -121,13 +182,25 @@ Steuersatz. Die App ersetzt keine Steuerberatung.
 creatordock init --kuenstlername "Name"        # Startdaten aus dem Konzept anlegen
 creatordock status                             # Lagebild und offene Risiken
 
+creatordock persona status                     # Aufbaustand und Stufenplan
+creatordock persona name --name "NachtSchicht" # Namenskandidat aufnehmen
+creatordock persona namen                      # Kandidaten mit Prüfstand
+creatordock persona setzen --schluessel nische --wert "..."
+creatordock persona bios                       # Profiltexte je Plattform
+
+creatordock angebot zeigen                     # Standardangebot
+creatordock angebot zeigen --partnerin P1      # ihre Vereinbarung
+creatordock angebot setzen --schluessel gesicht --wert "ohne Gesicht"
+creatordock angebot setzen --partnerin P1 --schluessel stimme --wert verzerrt
+creatordock angebot blatt                      # Angebotsblatt als Text
+
 creatordock partnerin neu --pseudonym Model_A --quelle "Anzeige"
 creatordock partnerin liste
 creatordock partnerin gate --id P1 --gate release
 creatordock partnerin widerruf --id P1 --grund "..."
 
 creatordock dreh neu --datum 2026-08-15 --titel "..." --partnerin P1 --plattform OnlyFans
-creatordock dreh liste
+creatordock dreh liste                         # zeigt offene Auflagen
 creatordock dreh status --id D1 --wert gedreht
 
 creatordock buchen 2026-08-20 "OnlyFans Payout" "Einnahme Plattform" --einnahme 340
@@ -137,9 +210,13 @@ creatordock kalender planen --start 2026-08-10 --wochen 6
 creatordock aufgabe liste
 creatordock kanaele
 
-creatordock vorlage model-release --out release.md
+creatordock vorlage angebot                        # Angebotsblatt
+creatordock vorlage model-release --partnerin P1 --out release.md
 creatordock bericht --out bericht.html
 ```
+
+Die Auflagen eines Drehs hakst du in der Oberfläche unter *Drehs* ab — sie
+klappen dort auf, sobald der Dreh auf „geschnitten" steht.
 
 Die Vetting-Schlüssel für `--gate`: `erstkontakt`, `alter_verifiziert`,
 `kennenlernen`, `release`, `sti_nachweis`, `verguetung`, `widerrufsfrist`.
