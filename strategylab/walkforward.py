@@ -105,6 +105,7 @@ class WalkForwardResult:
     strategy_name: str
     windows: pd.DataFrame  # eine Zeile je Fenster
     oos_equity: pd.Series  # verkettete Out-of-Sample-Equity
+    oos_returns: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
     oos_stats: dict = field(default_factory=dict)
 
     def summary_text(self) -> str:
@@ -191,5 +192,6 @@ def walk_forward(
         strategy_name=strategy_name,
         windows=pd.DataFrame(window_rows),
         oos_equity=oos_equity,
+        oos_returns=all_oos,
         oos_stats=oos_stats,
     )

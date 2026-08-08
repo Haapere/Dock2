@@ -1,6 +1,16 @@
 # StrategyLab
 
-Ein Python-Werkzeug, um Trading-Strategien zu **entwickeln**, auf historischen Daten zu **backtesten** und ihre **Zukunftstauglichkeit zu prüfen** (Walk-Forward-Analyse und Papertrading/Forward-Test).
+Ein Python-Werkzeug, um Trading-Strategien zu **entwickeln**, auf historischen Daten zu **backtesten**, ihre **Zukunftstauglichkeit zu prüfen** (Walk-Forward-Analyse und Papertrading) und daraus einen **Bot mit Risikomanagement** zu betreiben.
+
+> **Vor dem ersten Euro lesen: [REGELN.md](REGELN.md)**
+>
+> Dort steht das Regelwerk, die Kriterien der Werteauswahl, die Prüfschwellen und
+> der Stufenplan zum Echtgeld — inklusive der unbequemen Einordnung, was ein
+> solcher Bot realistisch leisten kann und was nicht. Die kurze Fassung: Das
+> Werkzeug kann keine profitable Strategie herbeirechnen. Es kann unprofitable
+> Ideen zuverlässig aussortieren, bevor sie Geld kosten. Erwarte, dass die
+> Realitätsprüfung deine erste Idee ablehnt — das ist der Normalfall und
+> gleichzeitig ihr Nutzen.
 
 ## Installation
 
@@ -78,6 +88,77 @@ strategylab paper update --account paper.json --data data/demo.csv
 strategylab paper status --account paper.json
 ```
 
+## Der empfohlene Weg: von der Idee zum Bot
+
+Die Reihenfolge ist keine Empfehlung, sondern die Reihenfolge, in der die
+Fehler auffallen, solange sie noch nichts kosten. Ausführlich in
+[REGELN.md](REGELN.md).
+
+```bash
+# 1. Sind die Werte überhaupt handelbar? (Liquidität, Kosten, Volatilität, Datenqualität)
+#    --until nutzt nur Daten bis zum Stichtag -- gegen Selection Bias.
+strategylab screen --data data/*.csv --round-trip-cost 0.003 --until 2021-12-31
+
+# 2. Ist der Vorteil echt oder Zufall? Vier K.-o.-Kriterien, Urteil GO/VORSICHT/NO-GO.
+strategylab check --data data/aapl.csv --strategy sma_cross \
+    --grid "fast=10|20|30" "slow=100|150|200" \
+    --train 750 --test 250 --trials 500 --risk --save checks/aapl.json
+
+# 3. Wie wirkt Streuung über mehrere Werte? (Korrelationsmatrix inklusive)
+strategylab portfolio --data data/*.csv --strategy sma_cross \
+    --params fast=20,slow=100 --risk
+
+# 4. Bot einrichten und tägliche Orders berechnen -- nur mit Freigabe aus Schritt 2.
+strategylab bot init --config bot.json
+strategylab bot signals --config bot.json --holdings holdings.json --orders-csv orders.csv
+```
+
+### Werteauswahl (`screen`)
+
+Prüft jeden Wert gegen harte Ausschlusskriterien und bestimmt seinen Charakter
+(trendend / rückkehrend / gemischt), aus dem sich die passende Strategiefamilie
+ergibt. Wichtigste Kennzahl ist die **Kostenhürde**: Rundlaufkosten geteilt
+durch die typische Tagesbewegung. Sie ist bei einem Retail-Bot meist die
+bindende Grenze — nicht die Signalqualität.
+
+### Realitätsprüfung (`check`)
+
+Fünf unabhängige Angriffe auf das Backtest-Ergebnis: Kostensensitivität mit
+Break-Even-Kosten, Monte-Carlo-Permutationstest (zerstört die Ausrichtung
+zwischen Signal und Kurs bei gleicher Exposition), Deflated Sharpe Ratio
+(korrigiert für die Anzahl der Versuche), Parameter-Plateau statt Zufallsspitze
+und zeitliche Stabilität. Ergebnis ist ein Urteil mit begründeten
+Einzelkriterien. Bei **NO-GO verweigert der Bot die Ausgabe von Orders** —
+`check --save` schreibt das Protokoll, das die Freigabe steuert.
+
+### Risikomanagement (`--risk`)
+
+Verfügbar bei `check`, `portfolio` und im Bot. Drei Bausteine: Positionsgröße
+nach Volatilitäts-Ziel (Default 15 % p. a.), ATR-Stop-Loss (Default 3×ATR) und
+Notabschaltung bei Depot-Drawdown (Default 20 %, danach 20 Tage Pause).
+Alles streng kausal — jede Entscheidung an Tag *t* nutzt nur Daten bis *t*.
+
+### Portfolio (`portfolio`)
+
+Backtest über mehrere Werte mit Risikoparität (inverse Volatilität) und
+Gewichtsobergrenze je Wert. Gibt den gemessenen Diversifikationseffekt und die
+Korrelationsmatrix aus — damit sichtbar wird, ob wirklich gestreut wurde. Fünf
+unkorrelierte Werte senken die Schwankung um etwa 55 %, fünf Werte desselben
+Marktes mit Korrelation 0,8 nur um 8 %.
+
+### Bot (`bot`)
+
+Berechnet aus dem Signal des letzten abgeschlossenen Handelstags die
+Zielpositionen über das Universum, wendet Risiko- und Portfolioregeln an und
+stellt sie dem Ist-Bestand gegenüber. Ergebnis ist eine Orderliste zur
+**manuellen** Ausführung.
+
+Es gibt bewusst keine Broker-Anbindung. Ein Programm mit Zugriff auf ein echtes
+Depot kann bei einem Datenfehler, einem falschen Vorzeichen oder einem
+Kursfeed, der einen Aktiensplit als 90-%-Absturz meldet, in Minuten verlieren,
+was in Monaten verdient wurde. Bei Haltedauern von Wochen kostet manuelle
+Ausführung praktisch keine Rendite und verhindert genau diese Unfälle.
+
 ## Mitgelieferte Strategien
 
 | Name                 | Idee                                                        | Parameter |
@@ -146,3 +227,10 @@ python -m pytest tests/ -v
 ## Wichtiger Hinweis
 
 Dieses Tool dient der Analyse und Ausbildung. Es ist **keine Anlageberatung**. Backtest-Ergebnisse — auch walk-forward-validierte — garantieren keine zukünftigen Renditen.
+
+Auch ein GO der Realitätsprüfung bedeutet nur: Der gemessene Vorteil lässt sich
+statistisch nicht als Zufall erklären. Nicht, dass er in der Zukunft anhält.
+Was das Werkzeug ausdrücklich **nicht** kann, steht in
+[REGELN.md, Teil 6](REGELN.md) — dazu gehören fehlende Intraday-Absicherung,
+Survivorship Bias in den Kursdaten und die steuerliche Belastung häufigen
+Handelns.

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from strategylab import metrics
 from strategylab.strategy import Strategy
+
+if TYPE_CHECKING:  # nur für Typprüfung — vermeidet Zirkularimport zur Laufzeit
+    from strategylab.risk import RiskConfig, RiskResult
 
 
 @dataclass
@@ -23,6 +27,8 @@ class BacktestResult:
     trades: pd.DataFrame
     benchmark_equity: pd.Series
     stats: dict = field(default_factory=dict)
+    risk: "RiskResult | None" = None
+    """Protokoll der Risikoeingriffe, falls der Backtester mit `risk` läuft."""
 
     def summary_text(self) -> str:
         s = self.stats
@@ -63,16 +69,30 @@ class Backtester:
         initial_capital: float = 10_000.0,
         commission: float = 0.001,
         slippage: float = 0.0005,
+        risk: "RiskConfig | None" = None,
     ):
         self.initial_capital = initial_capital
         self.cost_per_turnover = commission + slippage
+        self.risk = risk
 
     def run(self, strategy: Strategy, df: pd.DataFrame) -> BacktestResult:
         if len(df) < 2:
             raise ValueError("Backtest braucht mindestens 2 Datenpunkte")
 
-        target = strategy.generate_signals(df).astype(float).clip(-1.0, 1.0)
-        target = target.reindex(df.index).fillna(0.0)
+        raw_target = strategy.generate_signals(df).astype(float)
+        raw_target = raw_target.reindex(df.index).fillna(0.0)
+
+        risk_result = None
+        if self.risk is not None:
+            from strategylab.risk import RiskManager
+
+            risk_result = RiskManager(self.risk).apply(df, raw_target, self.cost_per_turnover)
+            target = risk_result.positions
+            limit = self.risk.max_leverage
+        else:
+            target = raw_target
+            limit = 1.0
+        target = target.clip(-limit, limit)
 
         # Signal von Tag t wird ab Tag t+1 gehalten -> kein Look-Ahead-Bias.
         position = target.shift(1).fillna(0.0)
@@ -101,12 +121,25 @@ class Backtester:
             trades=trades,
             benchmark_equity=benchmark_equity,
             stats=stats,
+            risk=risk_result,
         )
 
     def _extract_trades(self, position: pd.Series, close: pd.Series) -> pd.DataFrame:
-        """Zerlegt die Positionsserie in einzelne Trades (Brutto, vor Kosten)."""
+        """Zerlegt die Positionsserie in einzelne Trades (Brutto, vor Kosten).
+
+        Ein Trade ist eine zusammenhängende Phase gleicher Richtung. Maßgeblich
+        ist deshalb das Vorzeichen, nicht die Positionsgröße: Bei aktiver
+        Volatilitäts-Zielsteuerung ändert sich die Größe fast täglich, und ohne
+        das Vorzeichen würde jeder dieser Anpassungstage als eigener Trade
+        gezählt — die Trade-Statistik wäre wertlos (hunderte "Trades" mit
+        Haltedauer 1 Tag).
+
+        Die Trade-Rendite ist die Kursbewegung in Richtung der Position, ohne
+        Größenskalierung; sie misst die Qualität des Signals, nicht den
+        Kapitalbeitrag.
+        """
         records = []
-        pos_arr = position.to_numpy()
+        pos_arr = np.sign(position.to_numpy())
         dates = position.index
         prices = close.to_numpy()
 
