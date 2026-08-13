@@ -8,3 +8,9 @@ data/
 report*.html
 paper*.json
 .venv/
+
+# FokusRadar
+*.db
+*.db-wal
+*.db-shm
+.env

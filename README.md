@@ -2,6 +2,8 @@
 
 Ein Python-Werkzeug, um Trading-Strategien zu **entwickeln**, auf historischen Daten zu **backtesten** und ihre **Zukunftstauglichkeit zu prüfen** (Walk-Forward-Analyse und Papertrading/Forward-Test).
 
+> In diesem Repository liegt außerdem **[FokusRadar](fokusradar/README.md)** — ein lokaler Aktivitäts-Monitor mit Verbesserungsvorschlägen. Eigenständiges Projekt im Ordner [`fokusradar/`](fokusradar/).
+
 ## Installation
 
 ```bash

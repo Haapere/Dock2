@@ -1,0 +1,19 @@
+# FokusRadar — Konfiguration (Phase 1)
+# Alle Werte sind optional; fehlende Einträge nutzen die Vorgabe.
+
+[erfassung]
+# Abstand zwischen zwei Abfragen des aktiven Fensters, in Sekunden (2-5 empfohlen)
+intervall_sekunden = 3
+# Ab dieser Zeit ohne Maus-/Tastatureingabe gilt die Zeit als Pause
+idle_schwelle_sekunden = 300
+# Abstand, in dem das Aktivitätslevel (Idle-Sekunden, Eingabe-Frequenz) gespeichert wird
+aktivitaets_intervall_sekunden = 60
+# Eingabe-Ereignisse zählen (nur die Anzahl, keine Tasteninhalte — kein Keylogging).
+# "auto" = einschalten, wenn pynput installiert ist; true/false erzwingen.
+eingaben_zaehlen = "auto"
+# Fenstertitel mitspeichern. false = nur Prozessnamen (datensparsamer)
+fenstertitel_speichern = true
+
+[speicher]
+# Pfad zur SQLite-Datenbank; leer = Standardpfad im Benutzerprofil
+datenbank = ""

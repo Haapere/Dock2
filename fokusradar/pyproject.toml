@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fokusradar"
+version = "0.1.0"
+description = "Aktivitäts-Monitor für den eigenen Rechner: erfasst lokal, was am Bildschirm passiert, und leitet daraus Verbesserungsvorschläge ab"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+# Windows-Backends (Phase 1 läuft auch ohne, dann mit eingeschränkter Erfassung)
+windows = ["pywin32>=306"]
+# Zählung der Eingabe-Ereignisse (nur Frequenz, keine Inhalte)
+input = ["pynput>=1.7"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+fokusradar = "fokusradar.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["fokusradar*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
