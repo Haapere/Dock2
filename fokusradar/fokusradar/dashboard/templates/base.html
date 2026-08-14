@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FokusRadar — {{ titel }}</title>
+<style>
+:root {
+  --grund: #f6f7f9;
+  --karte: #ffffff;
+  --text: #1c2024;
+  --leise: #6b7280;
+  --linie: #e3e6ea;
+  --fokus: #2f7d5c;
+  --neutral: #8a93a0;
+  --ablenkung: #b4553d;
+  --akzent: #2f5d8a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --grund: #14171a;
+    --karte: #1d2126;
+    --text: #e8eaed;
+    --leise: #9aa3ad;
+    --linie: #2b3037;
+    --fokus: #58ab84;
+    --neutral: #7d8794;
+    --ablenkung: #d1755a;
+    --akzent: #6ea3d8;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 1rem 3rem;
+  background: var(--grund); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 60rem; margin: 0 auto; }
+header { display: flex; flex-wrap: wrap; gap: .75rem; align-items: baseline;
+         justify-content: space-between; padding: 1.25rem 0 .5rem; }
+h1 { font-size: 1.35rem; margin: 0; }
+h2 { font-size: 1rem; margin: 1.75rem 0 .6rem; color: var(--leise);
+     text-transform: uppercase; letter-spacing: .06em; }
+nav a, .blaettern a {
+  color: var(--akzent); text-decoration: none; padding: .25rem .5rem;
+  border-radius: .4rem; border: 1px solid transparent;
+}
+nav a:hover, .blaettern a:hover { border-color: var(--linie); background: var(--karte); }
+nav a[aria-current="page"] { background: var(--karte); border-color: var(--linie); }
+.karte { background: var(--karte); border: 1px solid var(--linie);
+         border-radius: .7rem; padding: 1rem 1.1rem; }
+.kennzahlen { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+.kennzahl .label { color: var(--leise); font-size: .8rem; }
+.kennzahl .wert { font-size: 1.6rem; font-weight: 600; line-height: 1.2; }
+.kennzahl .zusatz { color: var(--leise); font-size: .8rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--linie); }
+th { color: var(--leise); font-weight: 600; font-size: .8rem; }
+td.zahl, th.zahl { text-align: right; font-variant-numeric: tabular-nums; }
+.balken { height: .55rem; border-radius: .3rem; background: var(--neutral); }
+.balken.fokus { background: var(--fokus); }
+.balken.ablenkung { background: var(--ablenkung); }
+.strahl { position: relative; height: 2.4rem; background: var(--grund);
+          border: 1px solid var(--linie); border-radius: .4rem; overflow: hidden; }
+.strahl .stueck { position: absolute; top: 0; bottom: 0; background: var(--neutral); }
+.strahl .stueck.fokus { background: var(--fokus); }
+.strahl .stueck.ablenkung { background: var(--ablenkung); }
+.stunden { position: relative; height: 1.1rem; color: var(--leise); font-size: .7rem; }
+.stunden span { position: absolute; transform: translateX(-50%); }
+.stapel { display: flex; height: 1.1rem; border-radius: .3rem; overflow: hidden;
+          background: var(--linie); }
+.stapel i { display: block; height: 100%; }
+.stapel .fokus { background: var(--fokus); }
+.stapel .neutral { background: var(--neutral); }
+.stapel .ablenkung { background: var(--ablenkung); }
+.vorschlag { display: flex; gap: .75rem; align-items: flex-start;
+             padding: .7rem 0; border-bottom: 1px solid var(--linie); }
+.vorschlag:last-child { border-bottom: none; }
+.vorschlag .quelle { flex: 0 0 auto; font-size: .7rem; color: var(--leise);
+                     border: 1px solid var(--linie); border-radius: .3rem; padding: .1rem .35rem; }
+.vorschlag button { border: 1px solid var(--linie); background: transparent;
+                    color: var(--leise); border-radius: .4rem; cursor: pointer;
+                    padding: .2rem .5rem; font-size: .75rem; }
+.vorschlag button:hover { color: var(--text); }
+.legende { display: flex; gap: 1rem; flex-wrap: wrap; color: var(--leise); font-size: .8rem; }
+.legende i { display: inline-block; width: .7rem; height: .7rem; border-radius: .2rem;
+             margin-right: .3rem; vertical-align: middle; background: var(--neutral); }
+.legende i.fokus { background: var(--fokus); }
+.legende i.ablenkung { background: var(--ablenkung); }
+.leer { color: var(--leise); padding: 1.5rem 0; }
+footer { color: var(--leise); font-size: .78rem; margin-top: 2.5rem;
+         border-top: 1px solid var(--linie); padding-top: .8rem; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>FokusRadar</h1>
+  <nav>
+    <a href="/tag/{{ tag_iso }}" {% if block_name == 'tag' %}aria-current="page"{% endif %}>Tag</a>
+    <a href="/woche?bis={{ tag_iso }}" {% if block_name == 'woche' %}aria-current="page"{% endif %}>Woche</a>
+  </nav>
+</header>
+
+{% block inhalt %}{% endblock %}
+
+<footer>
+  FokusRadar {{ version }} — alle Daten liegen lokal auf diesem Gerät.
+  Auswertung nach den Regeln in <code>categories.yaml</code>.
+</footer>
+</main>
+</body>
+</html>

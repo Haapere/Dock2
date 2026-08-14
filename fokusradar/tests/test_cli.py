@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta
 
 import pytest
 
@@ -18,10 +18,13 @@ def db_pfad(tmp_path):
 
 
 def _daten_anlegen(pfad, *, tag_versatz: int = 0) -> None:
-    """Zwei abgeschlossene Fensternutzungen und einen Messpunkt schreiben."""
-    beginn = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(
-        days=tag_versatz, hours=1
-    )
+    """Zwei abgeschlossene Fensternutzungen und einen Messpunkt schreiben.
+
+    Verankert auf 09:00 Ortszeit des jeweiligen Tages — „vor einer Stunde" wäre
+    kurz nach Mitternacht schon der Vortag und die Tagesfilter würden wackeln.
+    """
+    tag = (datetime.now().astimezone() - timedelta(days=tag_versatz)).date()
+    beginn = datetime.combine(tag, time(9, 0)).astimezone()
     with Database(pfad) as db:
         erstes = db.open_window_event(WindowInfo("code.exe", "main.py"), beginn)
         db.close_window_event(erstes, beginn + timedelta(minutes=25))
@@ -143,3 +146,119 @@ def test_tagesangaben_werden_verstanden():
     assert timeutil.parse_day("gestern", heute) == heute - timedelta(days=1)
     assert timeutil.parse_day("-3", heute) == heute - timedelta(days=3)
     assert timeutil.parse_day("2026-01-02", heute) == datetime(2026, 1, 2).date()
+
+
+def _tagesdaten(pfad, *, tag_versatz: int = 0) -> None:
+    """Einen Arbeitstag mit Fokus- und Ablenkungszeit anlegen."""
+    tag = (datetime.now().astimezone() - timedelta(days=tag_versatz)).date()
+    start = datetime.combine(tag, time(9, 0)).astimezone()
+    verlauf = [
+        (0, 3600, "code.exe", "main.py"),
+        (60, 1800, "firefox.exe", "Doku – YouTube"),
+        (90, 3600, "code.exe", "test.py"),
+    ]
+    with Database(pfad) as db:
+        for versatz, dauer, prozess, titel in verlauf:
+            beginn = start + timedelta(minutes=versatz)
+            event_id = db.open_window_event(WindowInfo(prozess, titel), beginn)
+            db.close_window_event(event_id, beginn + timedelta(seconds=dauer))
+
+
+def test_auswerten_zeigt_kennzahlen_und_speichert(db_pfad, capsys):
+    _tagesdaten(db_pfad)
+    assert main(["--db", str(db_pfad), "auswerten"]) == 0
+    ausgabe = capsys.readouterr().out
+
+    assert "Erfasste Zeit" in ausgabe
+    assert "2h 30m" in ausgabe
+    assert "Fokus-Sessions" in ausgabe
+    assert "Top-Ablenkungen" in ausgabe
+    assert "Vorschläge" in ausgabe
+
+    with Database(db_pfad) as db:
+        tag = timeutil.parse_day("heute")
+        assert db.daily_summary(tag)["total_active_minutes"] == 150
+        assert db.suggestions(day=tag)
+        # Die Kategorien stehen jetzt auch an den Rohdaten.
+        assert {e.category for e in db.window_events(day=tag)} == {
+            "entwicklung",
+            "ablenkung",
+        }
+
+
+def test_auswerten_kann_ohne_speichern_laufen(db_pfad, capsys):
+    _tagesdaten(db_pfad)
+    assert main(["--db", str(db_pfad), "auswerten", "--nicht-speichern"]) == 0
+    capsys.readouterr()
+
+    with Database(db_pfad) as db:
+        assert db.daily_summary(timeutil.parse_day("heute")) is None
+        assert db.suggestions() == []
+
+
+def test_auswerten_mit_wochentrend(db_pfad, capsys):
+    _tagesdaten(db_pfad)
+    _tagesdaten(db_pfad, tag_versatz=2)
+    assert main(["--db", str(db_pfad), "auswerten", "--woche"]) == 0
+    ausgabe = capsys.readouterr().out
+
+    assert "Letzte sieben Tage" in ausgabe
+    zeilen = [z for z in ausgabe.splitlines() if z.startswith("20")]
+    assert len(zeilen) == 7
+    assert sum(1 for z in zeilen if "—" in z) == 5
+
+
+def test_auswerten_ohne_daten(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "auswerten"]) == 0
+    assert "keine Daten" in capsys.readouterr().out
+
+
+def test_kategorien_anzeigen_und_testen(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "kategorien"]) == 0
+    liste = capsys.readouterr().out
+    assert "entwicklung" in liste and "zählt als fokus" in liste
+    assert "eingebaute Regeln" in liste
+
+    assert main(
+        ["--db", str(db_pfad), "kategorien", "--test", "firefox.exe", "--titel", "Musik – YouTube"]
+    ) == 0
+    test = capsys.readouterr().out
+    assert "→ Kategorie: ablenkung" in test
+
+
+def test_eigene_regeldatei_wird_benutzt(tmp_path, db_pfad, capsys):
+    config_pfad = tmp_path / "config.toml"
+    (tmp_path / "categories.yaml").write_text(
+        "standard: alles\nkategorien:\n  - name: alles\n    zaehlt_als: fokus\n"
+        "    prozesse: ['*']\n",
+        encoding="utf-8",
+    )
+    config_pfad.write_text("[erfassung]\nintervall_sekunden = 2\n", encoding="utf-8")
+
+    assert main(["--config", str(config_pfad), "--db", str(db_pfad), "kategorien"]) == 0
+    ausgabe = capsys.readouterr().out
+    assert "categories.yaml" in ausgabe
+    assert "alles" in ausgabe
+
+
+def test_kaputte_regeldatei_liefert_exitcode_2(tmp_path, db_pfad, capsys):
+    config_pfad = tmp_path / "config.toml"
+    config_pfad.write_text("[erfassung]\n", encoding="utf-8")
+    (tmp_path / "categories.yaml").write_text("kategorien: []\n", encoding="utf-8")
+
+    assert main(["--config", str(config_pfad), "--db", str(db_pfad), "auswerten"]) == 2
+    assert "Fehler in den Regeln" in capsys.readouterr().err
+
+
+def test_config_anlegen_erzeugt_auch_die_regeldatei(tmp_path, capsys):
+    pfad = tmp_path / "config.toml"
+    assert main(["--config", str(pfad), "config", "--anlegen"]) == 0
+    ausgabe = capsys.readouterr().out
+
+    assert (tmp_path / "categories.yaml").is_file()
+    assert "Regeldatei angelegt" in ausgabe
+
+    assert main(["--config", str(pfad), "config"]) == 0
+    anzeige = capsys.readouterr().out
+    assert "Regeldatei" in anzeige
+    assert "Dashboard          http://127.0.0.1:8760/" in anzeige

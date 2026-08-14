@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_CONFIG_TEMPLATE = """\
-# FokusRadar — Konfiguration (Phase 1)
+# FokusRadar — Konfiguration
 # Alle Werte sind optional; fehlende Einträge nutzen die Vorgabe.
 
 [erfassung]
@@ -39,6 +39,23 @@ fenstertitel_speichern = true
 [speicher]
 # Pfad zur SQLite-Datenbank; leer = Standardpfad im Benutzerprofil
 datenbank = ""
+
+[analyse]
+# Ab dieser Dauer gilt ein zusammenhängender Block als Fokus-Session
+fokus_mindestdauer_sekunden = 600
+# Kurze Abstecher bis zu dieser Länge unterbrechen eine Fokus-Session nicht
+unterbrechung_toleranz_sekunden = 60
+# Ab so vielen Fensterwechseln pro Stunde weist die Auswertung darauf hin
+wechsel_schwelle_pro_stunde = 40
+# Ab diesem Anteil Ablenkungszeit (0.2 = 20 %) weist die Auswertung darauf hin
+ablenkung_schwelle_anteil = 0.2
+# Regeldatei mit den Kategorien; leer = categories.yaml neben dieser Datei
+kategorien_datei = ""
+
+[dashboard]
+# Adresse der lokalen Weboberfläche (fokusradar dashboard)
+host = "127.0.0.1"
+port = 8760
 """
 
 
@@ -54,12 +71,44 @@ class CaptureConfig:
 
 
 @dataclass(frozen=True)
+class AnalysisConfig:
+    """Einstellungen der lokalen Auswertung (Phase 2)."""
+
+    focus_minimum_seconds: float = 600.0
+    interruption_tolerance_seconds: float = 60.0
+    switch_rate_threshold: float = 40.0
+    distraction_share_threshold: float = 0.2
+    categories_path: Path | None = None
+    #: Ab so vielen Aufrufen mit kurzer Verweildauer gilt eine App als „Zappel-App".
+    short_visit_count: int = 8
+    short_visit_seconds: float = 60.0
+
+
+@dataclass(frozen=True)
+class DashboardConfig:
+    """Einstellungen der lokalen Weboberfläche (Phase 2)."""
+
+    host: str = "127.0.0.1"
+    port: int = 8760
+
+
+@dataclass(frozen=True)
 class Config:
     """Gesamte Konfiguration inklusive Herkunft der Datei."""
 
     capture: CaptureConfig = field(default_factory=CaptureConfig)
+    analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
+    dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     database_path: Path = field(default_factory=lambda: default_database_path())
     source: Path | None = None
+
+    @property
+    def categories_path(self) -> Path:
+        """Pfad der Regeldatei: aus der Konfiguration oder neben ihr."""
+        if self.analysis.categories_path is not None:
+            return self.analysis.categories_path
+        base = self.source.parent if self.source is not None else default_config_path().parent
+        return base / "categories.yaml"
 
     def with_overrides(
         self,
@@ -193,7 +242,52 @@ def load_config(path: Path | None = None) -> Config:
         Path(database_raw).expanduser() if database_raw.strip() else default_database_path()
     )
 
-    return Config(capture=capture, database_path=database_path, source=config_path)
+    analysis_section = raw.get("analyse", {})
+    if not isinstance(analysis_section, dict):
+        raise ConfigError("Abschnitt [analyse] muss eine Tabelle sein")
+    categories_raw = analysis_section.get("kategorien_datei", "")
+    if not isinstance(categories_raw, str):
+        raise ConfigError("'kategorien_datei' muss ein Pfad als Text sein")
+    share = _positive_number(analysis_section, "ablenkung_schwelle_anteil", 0.2)
+    if share > 1:
+        raise ConfigError(
+            f"'ablenkung_schwelle_anteil' ist ein Anteil zwischen 0 und 1, "
+            f"gefunden: {share!r}"
+        )
+    analysis = AnalysisConfig(
+        focus_minimum_seconds=_positive_number(
+            analysis_section, "fokus_mindestdauer_sekunden", 600.0
+        ),
+        interruption_tolerance_seconds=_positive_number(
+            analysis_section, "unterbrechung_toleranz_sekunden", 60.0
+        ),
+        switch_rate_threshold=_positive_number(
+            analysis_section, "wechsel_schwelle_pro_stunde", 40.0
+        ),
+        distraction_share_threshold=share,
+        categories_path=(
+            Path(categories_raw).expanduser() if categories_raw.strip() else None
+        ),
+    )
+
+    dashboard_section = raw.get("dashboard", {})
+    if not isinstance(dashboard_section, dict):
+        raise ConfigError("Abschnitt [dashboard] muss eine Tabelle sein")
+    host = dashboard_section.get("host", "127.0.0.1")
+    if not isinstance(host, str) or not host.strip():
+        raise ConfigError(f"'host' muss eine Adresse als Text sein, gefunden: {host!r}")
+    port = dashboard_section.get("port", 8760)
+    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+        raise ConfigError(f"'port' muss zwischen 1 und 65535 liegen, gefunden: {port!r}")
+    dashboard = DashboardConfig(host=host.strip(), port=port)
+
+    return Config(
+        capture=capture,
+        analysis=analysis,
+        dashboard=dashboard,
+        database_path=database_path,
+        source=config_path,
+    )
 
 
 def write_default_config(path: Path | None = None, *, overwrite: bool = False) -> Path:

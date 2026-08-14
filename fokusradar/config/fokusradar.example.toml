@@ -1,4 +1,4 @@
-# FokusRadar — Konfiguration (Phase 1)
+# FokusRadar — Konfiguration
 # Alle Werte sind optional; fehlende Einträge nutzen die Vorgabe.
 
 [erfassung]
@@ -17,3 +17,20 @@ fenstertitel_speichern = true
 [speicher]
 # Pfad zur SQLite-Datenbank; leer = Standardpfad im Benutzerprofil
 datenbank = ""
+
+[analyse]
+# Ab dieser Dauer gilt ein zusammenhängender Block als Fokus-Session
+fokus_mindestdauer_sekunden = 600
+# Kurze Abstecher bis zu dieser Länge unterbrechen eine Fokus-Session nicht
+unterbrechung_toleranz_sekunden = 60
+# Ab so vielen Fensterwechseln pro Stunde weist die Auswertung darauf hin
+wechsel_schwelle_pro_stunde = 40
+# Ab diesem Anteil Ablenkungszeit (0.2 = 20 %) weist die Auswertung darauf hin
+ablenkung_schwelle_anteil = 0.2
+# Regeldatei mit den Kategorien; leer = categories.yaml neben dieser Datei
+kategorien_datei = ""
+
+[dashboard]
+# Adresse der lokalen Weboberfläche (fokusradar dashboard)
+host = "127.0.0.1"
+port = 8760

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% set block_name = 'tag' %}
+{% block inhalt %}
+
+<div class="blaettern" style="display:flex; gap:.5rem; align-items:center; margin-bottom:1rem;">
+  <a href="/tag/{{ vortag }}">← {{ vortag }}</a>
+  <strong>{{ tag_iso }}{% if ist_heute %} (heute){% endif %}</strong>
+  {% if folgetag %}<a href="/tag/{{ folgetag }}">{{ folgetag }} →</a>{% endif %}
+</div>
+
+{% if not analyse.has_data %}
+  <div class="karte leer">
+    Für diesen Tag liegen keine Daten vor. Erfassung starten mit
+    <code>fokusradar track</code>.
+  </div>
+{% else %}
+
+<div class="kennzahlen">
+  {% for kennzahl in kennzahlen %}
+  <div class="karte kennzahl">
+    <div class="label">{{ kennzahl.label }}</div>
+    <div class="wert">{{ kennzahl.wert }}</div>
+    <div class="zusatz">{{ kennzahl.zusatz | default('', true) }}&nbsp;</div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>Tagesverlauf</h2>
+<div class="karte">
+  <div class="strahl">
+    {% for stueck in zeitstrahl.segmente %}
+    <span class="stueck {{ stueck.art }}" title="{{ stueck.titel }}"
+          style="left:{{ '%.3f' % stueck.links }}%; width:{{ '%.3f' % stueck.breite }}%"></span>
+    {% endfor %}
+  </div>
+  <div class="stunden">
+    {% for marke in zeitstrahl.stunden %}
+    <span style="left:{{ '%.3f' % marke.links }}%">{{ marke.label }}</span>
+    {% endfor %}
+  </div>
+  <div class="legende" style="margin-top:.6rem;">
+    <span><i class="fokus"></i>Fokus</span>
+    <span><i class="neutral"></i>neutral</span>
+    <span><i class="ablenkung"></i>Ablenkung</span>
+  </div>
+</div>
+
+{% if vorschlaege %}
+<h2>Vorschläge</h2>
+<div class="karte">
+  {% for vorschlag in vorschlaege %}
+  <div class="vorschlag">
+    <span class="quelle">{{ 'lokal' if vorschlag.source == 'local' else 'Cloud' }}</span>
+    <span style="flex:1">{{ vorschlag.text }}</span>
+    <form method="post"
+          action="/vorschlag/{{ vorschlag.id }}/erledigt?ziel={{ ('/tag/' ~ tag_iso) | urlencode }}">
+      <button type="submit" title="Vorschlag ausblenden">erledigt</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2>Kategorien</h2>
+<div class="karte">
+  <table>
+    <thead>
+      <tr><th>Kategorie</th><th class="zahl">Zeit</th><th class="zahl">Anteil</th><th style="width:40%"></th></tr>
+    </thead>
+    <tbody>
+      {% for kategorie in kategorien %}
+      <tr>
+        <td>{{ kategorie.name }}</td>
+        <td class="zahl">{{ kategorie.dauer }}</td>
+        <td class="zahl">{{ '%.0f' % kategorie.anteil }} %</td>
+        <td><div class="balken {{ kategorie.art }}" style="width:{{ '%.1f' % kategorie.anteil }}%"></div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Fokus-Sessions</h2>
+<div class="karte">
+  {% if sessions %}
+  <table>
+    <thead>
+      <tr><th>Von</th><th>Bis</th><th class="zahl">Fokuszeit</th><th class="zahl">Unterbrechungen</th><th>Hauptprogramm</th></tr>
+    </thead>
+    <tbody>
+      {% for session in sessions %}
+      <tr>
+        <td>{{ session.von }}</td>
+        <td>{{ session.bis }}</td>
+        <td class="zahl">{{ session.dauer }}</td>
+        <td class="zahl">{{ session.unterbrechungen }}</td>
+        <td>{{ session.programm }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="leer">Kein zusammenhängender Block über der Mindestdauer.</div>
+  {% endif %}
+</div>
+
+<h2>Programme</h2>
+<div class="karte">
+  <table>
+    <thead>
+      <tr><th>Programm</th><th>Kategorie</th><th class="zahl">Zeit</th><th class="zahl">Aufrufe</th><th style="width:25%"></th></tr>
+    </thead>
+    <tbody>
+      {% for app in apps %}
+      <tr>
+        <td>{{ app.prozess }}</td>
+        <td>{{ app.kategorie }}</td>
+        <td class="zahl">{{ app.dauer }}</td>
+        <td class="zahl">{{ app.aufrufe }}</td>
+        <td><div class="balken {{ app.art }}" style="width:{{ '%.1f' % app.anteil }}%"></div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endif %}
+{% endblock %}

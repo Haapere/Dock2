@@ -32,6 +32,7 @@ from fokusradar.capture import (
 )
 from fokusradar.capture.base import IdleBackend, WindowBackend, WindowInfo
 from fokusradar.config import Config
+from fokusradar.processing.categories import Categorizer
 from fokusradar.storage.db import Database
 
 
@@ -64,6 +65,7 @@ class Tracker:
         window_backend: WindowBackend | None = None,
         idle_backend: IdleBackend | None = None,
         input_counter: object | None = None,
+        categorizer: Categorizer | None = None,
         on_event: Callable[[str], None] | None = None,
     ) -> None:
         self.db = database
@@ -73,6 +75,7 @@ class Tracker:
         self.input_counter = input_counter or create_input_counter(
             config.capture.count_input_events
         )
+        self.categorizer = categorizer or Categorizer.load(config.categories_path)
         self.stats = TrackerStats()
         self._on_event = on_event
         self._session: _CurrentSession | None = None
@@ -145,14 +148,20 @@ class Tracker:
             return
 
         self._close_session(now)
+        category = self.categorizer.categorize(info.process_name, info.window_title)
         event_id = self.db.open_window_event(
-            info, now, store_title=self.config.capture.store_window_titles
+            info,
+            now,
+            store_title=self.config.capture.store_window_titles,
+            category=category,
         )
         self._session = _CurrentSession(
             event_id=event_id, info=info, started_at=now, last_seen_at=now
         )
         self.stats.window_events += 1
-        self._notify(f"Fenster: {info.process_name} — {info.window_title or 'ohne Titel'}")
+        self._notify(
+            f"Fenster: {info.process_name} — {info.window_title or 'ohne Titel'} [{category}]"
+        )
 
     def _close_session(self, at: datetime) -> None:
         session = self._session

@@ -8,20 +8,26 @@ version = "0.1.0"
 description = "Aktivitäts-Monitor für den eigenen Rechner: erfasst lokal, was am Bildschirm passiert, und leitet daraus Verbesserungsvorschläge ab"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+# Für die Kategorien-Regeln (eingebaute wie eigene categories.yaml).
+dependencies = ["pyyaml>=6"]
 
 [project.optional-dependencies]
+# Lokale Weboberfläche (fokusradar dashboard)
+dashboard = ["fastapi>=0.110", "uvicorn>=0.27", "jinja2>=3.1"]
 # Windows-Backends (Phase 1 läuft auch ohne, dann mit eingeschränkter Erfassung)
 windows = ["pywin32>=306"]
 # Zählung der Eingabe-Ereignisse (nur Frequenz, keine Inhalte)
 input = ["pynput>=1.7"]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "httpx>=0.27"]
 
 [project.scripts]
 fokusradar = "fokusradar.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["fokusradar*"]
+
+[tool.setuptools.package-data]
+fokusradar = ["dashboard/templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

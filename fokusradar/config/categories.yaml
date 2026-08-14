@@ -1,0 +1,80 @@
+# FokusRadar — Kategorien und Regeln
+#
+# "zaehlt_als" steuert die Auswertung:
+#   fokus     — zählt als konzentrierte Arbeit (bildet die Fokus-Sessions)
+#   ablenkung — zählt als Ablenkung (Top-Ablenkungen, Ablenkungsanteil)
+#   neutral   — wird nur gezählt, aber weder als Fokus noch als Ablenkung gewertet
+#
+# Geprüft wird zuerst über alle "titel"-Muster (Teiltreffer), danach über alle
+# "prozesse"-Muster (mit * und ? als Platzhaltern). Die erste Übereinstimmung gewinnt.
+
+standard: sonstiges
+
+kategorien:
+  - name: entwicklung
+    zaehlt_als: fokus
+    prozesse:
+      - code.exe
+      - devenv.exe
+      - pycharm*.exe
+      - idea*.exe
+      - sublime_text.exe
+      - notepad++.exe
+      - WindowsTerminal.exe
+      - powershell.exe
+      - cmd.exe
+      - windsurf.exe
+    titel:
+      - stack overflow
+      - github.com
+      - gitlab
+      - docs.python.org
+
+  - name: schreiben_und_planen
+    zaehlt_als: fokus
+    prozesse:
+      - WINWORD.EXE
+      - EXCEL.EXE
+      - POWERPNT.EXE
+      - Acrobat.exe
+      - obsidian.exe
+      - notion.exe
+      - onenote.exe
+    titel:
+      - confluence
+      - jira
+
+  - name: kommunikation
+    zaehlt_als: neutral
+    prozesse:
+      - outlook.exe
+      - ms-teams.exe
+      - teams.exe
+      - slack.exe
+      - thunderbird.exe
+      - zoom.exe
+      - webex.exe
+
+  - name: ablenkung
+    zaehlt_als: ablenkung
+    prozesse:
+      - steam.exe
+      - discord.exe
+    titel:
+      - youtube
+      - netflix
+      - twitch
+      - reddit
+      - instagram
+      - tiktok
+      - facebook
+      - 9gag
+
+  - name: sonstiges
+    zaehlt_als: neutral
+    prozesse:
+      - explorer.exe
+      - firefox.exe
+      - chrome.exe
+      - msedge.exe
+      - spotify.exe

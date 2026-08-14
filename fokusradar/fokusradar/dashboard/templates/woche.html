@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set block_name = 'woche' %}
+{% block inhalt %}
+
+<div class="kennzahlen">
+  {% for kennzahl in kennzahlen %}
+  <div class="karte kennzahl">
+    <div class="label">{{ kennzahl.label }}</div>
+    <div class="wert">{{ kennzahl.wert }}</div>
+    <div class="zusatz">{{ kennzahl.zusatz | default('', true) }}&nbsp;</div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>Die letzten sieben Tage</h2>
+<div class="karte">
+  <table>
+    <thead>
+      <tr>
+        <th>Tag</th><th class="zahl">Erfasst</th><th class="zahl">Fokus</th>
+        <th class="zahl">Wechsel/h</th><th style="width:45%">Verteilung</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for zeile in zeilen %}
+      <tr>
+        <td><a href="/tag/{{ zeile.tag_iso }}">{{ zeile.wochentag }} {{ zeile.tag_iso[5:] }}</a></td>
+        <td class="zahl">{{ zeile.gesamt if not zeile.leer else '—' }}</td>
+        <td class="zahl">{{ zeile.fokus_dauer if not zeile.leer else '—' }}</td>
+        <td class="zahl">{{ zeile.wechsel if not zeile.leer else '—' }}</td>
+        <td>
+          {% if zeile.leer %}
+            <span class="leer" style="padding:0">keine Daten</span>
+          {% else %}
+          <div style="width:{{ '%.1f' % zeile.breite }}%">
+            <div class="stapel">
+              <i class="fokus" style="width:{{ '%.1f' % zeile.fokus }}%"></i>
+              <i class="neutral" style="width:{{ '%.1f' % zeile.neutral }}%"></i>
+              <i class="ablenkung" style="width:{{ '%.1f' % zeile.ablenkung }}%"></i>
+            </div>
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="legende" style="margin-top:.8rem;">
+    <span><i class="fokus"></i>Fokus</span>
+    <span><i class="neutral"></i>neutral</span>
+    <span><i class="ablenkung"></i>Ablenkung</span>
+    <span>Balkenlänge = erfasste Zeit im Vergleich zum stärksten Tag</span>
+  </div>
+</div>
+
+{% if vorschlaege %}
+<h2>Offene Vorschläge</h2>
+<div class="karte">
+  {% for vorschlag in vorschlaege %}
+  <div class="vorschlag">
+    <span class="quelle">{{ vorschlag.date.isoformat() }}</span>
+    <span style="flex:1">{{ vorschlag.text }}</span>
+    <form method="post"
+          action="/vorschlag/{{ vorschlag.id }}/erledigt?ziel={{ ('/woche?bis=' ~ tag_iso) | urlencode }}">
+      <button type="submit" title="Vorschlag ausblenden">erledigt</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

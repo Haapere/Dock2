@@ -5,6 +5,9 @@
     fokusradar log        # Rohdaten: letzte Fensterwechsel
     fokusradar zeiten     # Zeit je Programm an einem Tag
     fokusradar aktivitaet # Messpunkte des Aktivitätslevels
+    fokusradar auswerten  # Tagesauswertung mit Fokus, Ablenkung, Vorschlägen
+    fokusradar kategorien # Regeln anzeigen und ausprobieren
+    fokusradar dashboard  # lokale Weboberfläche starten
     fokusradar config     # Konfiguration anzeigen oder anlegen
 """
 
@@ -20,6 +23,13 @@ from pathlib import Path
 from fokusradar import __version__, timeutil
 from fokusradar.agent import Tracker
 from fokusradar.config import Config, ConfigError, load_config, write_default_config
+from fokusradar.dashboard.app import DashboardUnavailable, run_dashboard
+from fokusradar.processing.analysis import analyze_day, last_days, store_analysis
+from fokusradar.processing.categories import (
+    Categorizer,
+    CategoryError,
+    write_default_categories,
+)
 from fokusradar.storage.db import Database
 
 
@@ -88,6 +98,39 @@ def _build_parser() -> argparse.ArgumentParser:
     aktivitaet.add_argument("--anzahl", type=int, default=20, metavar="N", help="Vorgabe: 20")
     aktivitaet.set_defaults(func=_cmd_aktivitaet)
 
+    auswerten = subparsers.add_parser(
+        "auswerten", help="Tagesauswertung: Fokus, Ablenkung, Vorschläge"
+    )
+    auswerten.add_argument("--tag", default="heute", metavar="TAG", help="Vorgabe: heute")
+    auswerten.add_argument(
+        "--woche",
+        action="store_true",
+        help="zusätzlich den Trend der letzten sieben Tage zeigen",
+    )
+    auswerten.add_argument(
+        "--nicht-speichern",
+        action="store_true",
+        help="Zusammenfassung und Vorschläge nur anzeigen, nicht speichern",
+    )
+    auswerten.set_defaults(func=_cmd_auswerten)
+
+    kategorien = subparsers.add_parser(
+        "kategorien", help="Regeln anzeigen oder eine Zuordnung ausprobieren"
+    )
+    kategorien.add_argument(
+        "--test", metavar="PROZESS", help="Kategorie für diesen Prozessnamen bestimmen"
+    )
+    kategorien.add_argument("--titel", metavar="TITEL", help="Fenstertitel zum Test")
+    kategorien.set_defaults(func=_cmd_kategorien)
+
+    dashboard = subparsers.add_parser("dashboard", help="lokale Weboberfläche starten")
+    dashboard.add_argument("--host", metavar="ADRESSE", help="Vorgabe: 127.0.0.1")
+    dashboard.add_argument("--port", type=int, metavar="PORT", help="Vorgabe: 8760")
+    dashboard.add_argument(
+        "--browser", action="store_true", help="Browser automatisch öffnen"
+    )
+    dashboard.set_defaults(func=_cmd_dashboard)
+
     config_cmd = subparsers.add_parser("config", help="Konfiguration anzeigen oder anlegen")
     config_cmd.add_argument(
         "--anlegen",
@@ -112,6 +155,11 @@ def _parse_day(value: str | None) -> date | None:
     if value is None:
         return None
     return timeutil.parse_day(value)
+
+
+def _plural(anzahl: int, einzahl: str, mehrzahl: str) -> str:
+    """„1 Aufruf" statt „1 Aufrufe"."""
+    return f"{anzahl} {einzahl if anzahl == 1 else mehrzahl}"
 
 
 def _shorten(text: str | None, width: int) -> str:
@@ -285,6 +333,132 @@ def _cmd_aktivitaet(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _cmd_auswerten(args: argparse.Namespace, config: Config) -> int:
+    day = _parse_day(args.tag) or timeutil.parse_day("heute")
+    categorizer = Categorizer.load(config.categories_path)
+
+    with Database(config.database_path) as database:
+        analysis = analyze_day(database, categorizer, day, config.analysis)
+        if not args.nicht_speichern:
+            store_analysis(database, analysis)
+
+        _print_day_analysis(analysis, categorizer)
+
+        if args.woche:
+            print("\nLetzte sieben Tage")
+            print(f"{'Tag':<12} {'Erfasst':>9} {'Fokus':>9} {'Ablenkung':>10} {'Wechsel/h':>10}")
+            print("-" * 54)
+            for tag in last_days(day, 7):
+                trend = analyze_day(database, categorizer, tag, config.analysis)
+                if not trend.has_data:
+                    print(f"{tag.isoformat():<12} {'—':>9} {'—':>9} {'—':>10} {'—':>10}")
+                    continue
+                print(
+                    f"{tag.isoformat():<12} "
+                    f"{timeutil.format_duration(trend.total_seconds):>9} "
+                    f"{timeutil.format_duration(trend.focus_seconds):>9} "
+                    f"{trend.distraction_share * 100:9.0f}% "
+                    f"{trend.switches_per_hour:10.0f}"
+                )
+    return 0
+
+
+def _print_day_analysis(analysis, categorizer: Categorizer) -> None:
+    """Tagesauswertung als Text ausgeben."""
+    dauer = timeutil.format_duration
+    print(f"Auswertung für {analysis.day.isoformat()}")
+    if not analysis.has_data:
+        print("Für diesen Tag liegen keine Daten vor.")
+        return
+
+    print(
+        f"  Erfasste Zeit    {dauer(analysis.total_seconds)}\n"
+        f"  Fokuszeit        {dauer(analysis.focus_seconds)} "
+        f"({analysis.focus_share * 100:.0f} %)\n"
+        f"  Ablenkung        {dauer(analysis.distraction_seconds)} "
+        f"({analysis.distraction_share * 100:.0f} %)\n"
+        f"  Fensterwechsel   {analysis.switches} "
+        f"({analysis.switches_per_hour:.0f} pro Stunde)\n"
+        f"  Längster Block   {dauer(analysis.longest_focus_seconds)}"
+    )
+
+    print("\nKategorien")
+    for name, seconds in sorted(analysis.category_seconds.items(), key=lambda item: -item[1]):
+        anteil = seconds / analysis.total_seconds * 100 if analysis.total_seconds else 0
+        art = categorizer.kind_of(name)
+        markierung = {"fokus": "+", "ablenkung": "−"}.get(art, " ")
+        bar = "█" * max(1, round(anteil / 4)) if seconds else ""
+        print(f"  {markierung} {_shorten(name, 22):<22} {dauer(seconds):>9} {anteil:5.1f}%  {bar}")
+
+    if analysis.focus_sessions:
+        print("\nFokus-Sessions")
+        for session in analysis.focus_sessions:
+            von = timeutil.to_local(session.start).strftime("%H:%M")
+            bis = timeutil.to_local(session.end).strftime("%H:%M")
+            unterbrechungen = (
+                ", " + _plural(session.interruptions, "Unterbrechung", "Unterbrechungen")
+                if session.interruptions
+                else ""
+            )
+            print(
+                f"  {von}–{bis}  {dauer(session.focus_seconds):>9}  "
+                f"{session.main_process}{unterbrechungen}"
+            )
+    else:
+        print("\nFokus-Sessions: kein Block über der Mindestdauer.")
+
+    if analysis.top_distractions:
+        print("\nTop-Ablenkungen")
+        for app in analysis.top_distractions:
+            print(
+                f"  {_shorten(app.process_name, 22):<22} {dauer(app.seconds):>9} "
+                f"({_plural(app.events, 'Aufruf', 'Aufrufe')})"
+            )
+
+    if analysis.suggestions:
+        print("\nVorschläge")
+        for text in analysis.suggestions:
+            print(f"  • {text}")
+
+
+def _cmd_kategorien(args: argparse.Namespace, config: Config) -> int:
+    categorizer = Categorizer.load(config.categories_path)
+
+    if args.test:
+        kategorie = categorizer.categorize(args.test, args.titel)
+        print(f"Prozess: {args.test}")
+        print(f"Titel:   {args.titel or '—'}")
+        print(f"→ Kategorie: {kategorie} (zählt als {categorizer.kind_of(kategorie)})")
+        return 0
+
+    quelle = categorizer.source or "eingebaute Regeln"
+    print(f"Regeln aus: {quelle}")
+    print(f"Standard-Kategorie: {categorizer.default}\n")
+    for category in categorizer.categories:
+        print(f"{category.name}  (zählt als {category.kind})")
+        if category.process_patterns:
+            print(f"  Prozesse: {', '.join(category.process_patterns)}")
+        if category.title_patterns:
+            print(f"  Titel:    {', '.join(category.title_patterns)}")
+    if categorizer.source is None:
+        print(
+            "\nEigene Regeln anlegen mit 'fokusradar config --anlegen' "
+            "(schreibt auch categories.yaml)."
+        )
+    return 0
+
+
+def _cmd_dashboard(args: argparse.Namespace, config: Config) -> int:
+    try:
+        run_dashboard(
+            config, host=args.host, port=args.port, open_browser=args.browser
+        )
+    except DashboardUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        return 3
+    return 0
+
+
 def _cmd_config(args: argparse.Namespace, config: Config) -> int:
     if args.anlegen:
         try:
@@ -293,15 +467,26 @@ def _cmd_config(args: argparse.Namespace, config: Config) -> int:
             print(f"Es gibt bereits eine Konfiguration: {exc}", file=sys.stderr)
             return 1
         print(f"Konfigurationsvorlage angelegt: {written}")
+        regeln = written.parent / "categories.yaml"
+        try:
+            write_default_categories(regeln)
+            print(f"Regeldatei angelegt:            {regeln}")
+        except FileExistsError:
+            print(f"Regeldatei bleibt unverändert:  {regeln}")
         return 0
 
     print(f"Quelle:            {config.source or 'Vorgabewerte (keine Datei gefunden)'}")
     print(f"Datenbank:         {config.database_path}")
+    regeln = config.categories_path
+    print(f"Regeldatei         {regeln}{'' if regeln.is_file() else '  (nicht vorhanden → eingebaute Regeln)'}")
     print(f"Intervall          {config.capture.interval_seconds:g} s")
     print(f"Idle-Schwelle      {config.capture.idle_threshold_seconds:g} s")
     print(f"Aktivitäts-Takt    {config.capture.activity_interval_seconds:g} s")
     print(f"Eingaben zählen    {config.capture.count_input_events}")
     print(f"Fenstertitel       {config.capture.store_window_titles}")
+    print(f"Fokus ab           {config.analysis.focus_minimum_seconds:g} s")
+    print(f"Toleranz           {config.analysis.interruption_tolerance_seconds:g} s")
+    print(f"Dashboard          http://{config.dashboard.host}:{config.dashboard.port}/")
     if config.source is None:
         print("\nMit 'fokusradar config --anlegen' eine Konfigurationsdatei erzeugen.")
     return 0
@@ -317,6 +502,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         return int(args.func(args, config))
+    except CategoryError as exc:
+        print(f"Fehler in den Regeln: {exc}", file=sys.stderr)
+        return 2
     except ValueError as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 2
