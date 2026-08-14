@@ -1,8 +1,10 @@
 package de.fokusradar.begleiter
 
 import android.content.Intent
+import android.media.projection.MediaProjectionManager
 import android.os.Bundle
 import android.provider.Settings as SystemSettings
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import de.fokusradar.begleiter.databinding.ActivityMainBinding
 import java.util.concurrent.Executors
@@ -39,12 +41,20 @@ class MainActivity : AppCompatActivity() {
         }
         oberflaeche.knopfPruefen.setOnClickListener { pruefen() }
         oberflaeche.knopfSenden.setOnClickListener { senden() }
+
+        oberflaeche.feldTakt.setText(einstellungen.screenIntervalMinutes.toString())
+        oberflaeche.feldGesperrt.setText(einstellungen.blockedPackages)
+        oberflaeche.knopfBildschirm.setOnClickListener { bildschirmUmschalten() }
     }
 
     override fun onResume() {
         super.onResume()
         // Nach dem Ausflug in die Systemeinstellungen kann die Berechtigung
         // plötzlich da sein — also jedes Mal frisch nachsehen.
+        oberflaeche.knopfBildschirm.setText(
+            if (einstellungen.screenEnabled) R.string.knopf_bildschirm_stopp
+            else R.string.knopf_bildschirm_start
+        )
         zeigeZustand()
         vorschauLaden()
     }
@@ -61,8 +71,53 @@ class MainActivity : AppCompatActivity() {
         einstellungen.token = oberflaeche.feldToken.text.toString()
         einstellungen.deviceName = oberflaeche.feldGeraet.text.toString()
         einstellungen.autoSync = oberflaeche.schalterAutomatisch.isChecked
+        einstellungen.blockedPackages = oberflaeche.feldGesperrt.text.toString()
+        oberflaeche.feldTakt.text.toString().toIntOrNull()?.let {
+            einstellungen.screenIntervalMinutes = it
+        }
         SyncWorker.schedule(this, einstellungen.autoSync)
         melde(getString(R.string.gespeichert))
+    }
+
+    /**
+     * Bildschirm-Aufnahmen starten oder beenden.
+     *
+     * Zum Starten fragt Android selbst nach — jedes Mal neu, und die Freigabe
+     * gilt nur für diese Sitzung. Ohne sie passiert nichts.
+     */
+    private fun bildschirmUmschalten() {
+        if (einstellungen.screenEnabled) {
+            ScreenCaptureService.stop(this)
+            einstellungen.screenEnabled = false
+            zeigeBildschirmZustand()
+            return
+        }
+        if (!bereit()) return
+        speichern()
+        val verwalter = getSystemService(MediaProjectionManager::class.java)
+        freigabe.launch(verwalter.createScreenCaptureIntent())
+    }
+
+    /** Antwort auf den Freigabe-Dialog von Android. */
+    private val freigabe = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { ergebnis ->
+        val daten = ergebnis.data
+        if (ergebnis.resultCode != RESULT_OK || daten == null) {
+            melde(getString(R.string.bildschirm_abgelehnt))
+            return@registerForActivityResult
+        }
+        ScreenCaptureService.start(this, ergebnis.resultCode, daten)
+        einstellungen.screenEnabled = true
+        zeigeBildschirmZustand()
+    }
+
+    private fun zeigeBildschirmZustand() {
+        val laeuft = einstellungen.screenEnabled
+        oberflaeche.knopfBildschirm.setText(
+            if (laeuft) R.string.knopf_bildschirm_stopp else R.string.knopf_bildschirm_start
+        )
+        melde(getString(if (laeuft) R.string.bildschirm_laeuft else R.string.bildschirm_aus))
     }
 
     private fun pruefen() {

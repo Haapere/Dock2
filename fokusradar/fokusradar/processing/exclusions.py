@@ -41,6 +41,14 @@ prozesse:
   - bitwarden*.exe
   - lastpass*.exe
   - "*keychain*"
+  # Dieselbe Liste gilt für Aufnahmen vom Handy (Phase 6); dort steht der
+  # Paketname an der Stelle des Prozesses. Absichtlich weit gefasst: lieber
+  # eine Aufnahme zu wenig als eine Bankseite zu viel.
+  - "*bank*"
+  - "*sparkasse*"
+  - "*paypal*"
+  - "*password*"
+  - "*authenticator*"
 
 titel:
   - online-banking

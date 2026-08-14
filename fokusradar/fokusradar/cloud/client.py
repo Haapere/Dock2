@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from fokusradar import timeutil
-from fokusradar.cloud import costs, prompts
+from fokusradar.cloud import costs, prompts, vision
 from fokusradar.config import CloudConfig, Config
 from fokusradar.processing.analysis import DayAnalysis
 
@@ -188,7 +188,35 @@ class CloudAnalyzer:
             + json.dumps(payload, ensure_ascii=False, indent=2),
         )
 
-    def _ask(self, system_prompt: str, user_text: str) -> CloudResult:
+    def analyze_image(
+        self, image: Path, *, context: str | None = None
+    ) -> CloudResult:
+        """Ein einzelnes Bildschirmfoto ansehen lassen (Phase 6).
+
+        Nur von Hand aufrufbar und nur mit ``[cloud] bilder_senden = true`` —
+        hier verlässt ein Bild das Gerät, nicht bloß eine Zahl.
+        """
+        if not self.settings.send_images:
+            raise CloudError(
+                "Das Senden von Bildern ist abgeschaltet. Zum Einschalten in der "
+                "Konfiguration [cloud] bilder_senden = true setzen.\n"
+                "Vorher ansehen, was hinausginge: fokusradar bild --zeigen"
+            )
+        self._ensure_client()  # erst prüfen, dann das Bild einlesen
+        info = vision.inspect_image(image)
+        return self._ask(
+            vision.VISION_SYSTEM_PROMPT,
+            vision.build_image_content(info, context),
+            schema=vision.VISION_RESPONSE_SCHEMA,
+        )
+
+    def _ask(
+        self,
+        system_prompt: str,
+        user_content: str | list[dict[str, Any]],
+        *,
+        schema: dict[str, Any] | None = None,
+    ) -> CloudResult:
         """Einen Aufruf ausführen und die Antwort auswerten."""
         client = self._ensure_client()
         model = self.settings.model
@@ -197,9 +225,12 @@ class CloudAnalyzer:
             "model": model,
             "max_tokens": self.settings.max_tokens,
             "system": system_prompt,
-            "messages": [{"role": "user", "content": user_text}],
+            "messages": [{"role": "user", "content": user_content}],
             "output_config": {
-                "format": {"type": "json_schema", "schema": prompts.RESPONSE_SCHEMA}
+                "format": {
+                    "type": "json_schema",
+                    "schema": schema or prompts.RESPONSE_SCHEMA,
+                }
             },
         }
         # Haiku 4.5 kennt den Effort-Parameter nicht und lehnt ihn ab.

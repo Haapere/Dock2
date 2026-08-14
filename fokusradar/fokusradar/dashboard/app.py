@@ -15,7 +15,9 @@ from typing import Any
 from urllib.parse import quote
 
 from fokusradar import __version__, timeutil
+from fokusradar.android import screen as android_screen
 from fokusradar.android import sync as android_sync
+from fokusradar.capture import create_ocr_backend
 from fokusradar.config import Config
 from fokusradar.processing.analysis import DayAnalysis, analyze_day, last_days, store_analysis
 from fokusradar.processing.categories import Categorizer
@@ -320,6 +322,18 @@ def create_app(config: Config, categorizer: Categorizer | None = None):
     def _database() -> Database:
         return Database.from_config(config)
 
+    ocr_backend: list[Any] = []  # erst beim ersten Bild vom Handy anlegen
+
+    def _ocr():
+        """Texterkennung — einmal erzeugt, danach wiederverwendet."""
+        if not ocr_backend:
+            ocr_backend.append(
+                create_ocr_backend(
+                    config.screenshots.ocr, config.screenshots.ocr_languages
+                )
+            )
+        return ocr_backend[0]
+
     def _tag(datum: str | None) -> date:
         if not datum:
             return timeutil.parse_day("heute")
@@ -447,6 +461,43 @@ def create_app(config: Config, categorizer: Categorizer | None = None):
             raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
         with _database() as database:
             return android_sync.apply_sync(database, anfrage, categorizer=rules)
+
+    @app.post("/api/android/bildschirm")
+    async def api_android_bildschirm(request: Request):
+        """Bildschirm-Aufnahme vom Handy entgegennehmen (Phase 6).
+
+        Die Texterkennung läuft lokal; das Bild wird danach gelöscht, sofern
+        ``[screenshots] bild_loeschen`` gilt. Ins Internet geht davon nichts.
+        """
+        _android_pruefen(request)
+        if not config.screenshots.enabled:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Bildschirm-Aufnahmen sind abgeschaltet — in der Konfiguration "
+                    "[screenshots] aktiv = true setzen."
+                ),
+            )
+        rohdaten = await request.body()
+        try:
+            aufnahme = android_screen.parse_capture(
+                rohdaten,
+                device=request.headers.get("x-fokusradar-geraet", ""),
+                package=request.headers.get("x-fokusradar-paket", ""),
+                label=request.headers.get("x-fokusradar-app"),
+            )
+        except android_sync.SyncError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+        with _database() as database:
+            liste = ExclusionList(list(database.exclusions()))
+            return android_screen.store_capture(
+                database,
+                config,
+                aufnahme,
+                ocr_backend=_ocr(),
+                exclusions=liste,
+            )
 
     return app
 

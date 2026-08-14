@@ -22,4 +22,20 @@
     <string name="unvollstaendig">Adresse und Token fehlen noch.</string>
     <string name="laeuft">Läuft …</string>
     <string name="ueberschrift_vorschau">Heute auf diesem Handy</string>
+
+    <string name="ueberschrift_bildschirm">Bildschirm-Aufnahmen</string>
+    <string name="erklaerung_bildschirm">Nimmt in großen Abständen ein Bild dieses Bildschirms auf und schickt es an den Rechner. Dort wird der Text erkannt und das Bild gelöscht — ins Internet geht davon nichts. Solange es läuft, zeigt Android eine Benachrichtigung.</string>
+    <string name="label_takt">Abstand in Minuten</string>
+    <string name="label_gesperrt">Apps, von denen nie eine Aufnahme entsteht</string>
+    <string name="hinweis_gesperrt">Ein Suchwort je Zeile, z. B. „bank“ oder „com.whatsapp“</string>
+    <string name="knopf_bildschirm_start">Aufnahmen starten</string>
+    <string name="knopf_bildschirm_stopp">Aufnahmen beenden</string>
+    <string name="bildschirm_laeuft">Aufnahmen laufen.</string>
+    <string name="bildschirm_aus">Aufnahmen sind aus.</string>
+    <string name="bildschirm_abgelehnt">Ohne Freigabe geht es nicht — abgebrochen.</string>
+
+    <string name="kanal_aufnahme">Bildschirm-Aufnahmen</string>
+    <string name="aufnahme_laeuft">FokusRadar nimmt den Bildschirm auf</string>
+    <string name="aufnahme_hinweis">Zum Beenden hier tippen.</string>
+    <string name="aufnahme_beenden">Beenden</string>
 </resources>

@@ -7,6 +7,10 @@ werden bereits angelegt, damit Phase 2-4 nur noch schreiben müssen.
 Bauplan hinzu: ohne die eine ließe sich das dort geforderte Kosten-Tracking
 nicht führen, ohne die andere die App-Nutzung des Handys nicht ablegen.
 
+``screenshots_meta`` bekommt in Phase 6 zwei Spalten dazu (``device``,
+``context``), damit Aufnahmen vom Handy von denen des Rechners zu
+unterscheiden sind.
+
 Zwei bewusste Ergänzungen gegenüber dem Bauplan bei ``window_events``:
 ``ended_at`` und ``duration_seconds``. Statt alle paar Sekunden eine Zeile zu
 schreiben, hält FokusRadar pro *zusammenhängender* Fensternutzung genau eine
@@ -18,7 +22,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS window_events (
@@ -49,7 +53,9 @@ CREATE TABLE IF NOT EXISTS screenshots_meta (      -- ab Phase 3
     timestamp DATETIME NOT NULL,
     ocr_text TEXT,
     screenshot_path TEXT,
-    deleted_at DATETIME
+    deleted_at DATETIME,
+    device TEXT,                       -- ab Phase 6: leer = dieser Rechner
+    context TEXT                       -- ab Phase 6: Programm bzw. Paket im Vordergrund
 );
 
 CREATE TABLE IF NOT EXISTS daily_summaries (       -- ab Phase 2
@@ -121,7 +127,30 @@ def apply_schema(connection: sqlite3.Connection) -> int:
             f"(Schemaversion {current}, unterstützt wird {SCHEMA_VERSION})."
         )
     connection.executescript(SCHEMA_SQL)
+    _add_missing_columns(connection)
     if current != SCHEMA_VERSION:
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     connection.commit()
     return SCHEMA_VERSION
+
+
+#: Spalten, die später zu einer bestehenden Tabelle dazugekommen sind.
+#: ``CREATE TABLE IF NOT EXISTS`` rührt eine vorhandene Tabelle nicht an —
+#: für ältere Datenbanken müssen sie einzeln nachgezogen werden.
+LATER_COLUMNS = {
+    "screenshots_meta": [
+        ("device", "TEXT"),   # Phase 6
+        ("context", "TEXT"),  # Phase 6
+    ],
+}
+
+
+def _add_missing_columns(connection: sqlite3.Connection) -> None:
+    """Fehlende Spalten ergänzen. Mehrfaches Aufrufen ist unschädlich."""
+    for tabelle, spalten in LATER_COLUMNS.items():
+        vorhanden = {
+            row[1] for row in connection.execute(f"PRAGMA table_info({tabelle})")
+        }
+        for name, typ in spalten:
+            if name not in vorhanden:
+                connection.execute(f"ALTER TABLE {tabelle} ADD COLUMN {name} {typ}")

@@ -133,6 +133,28 @@ class UsageCollector(private val context: Context) {
             .toList()
     }
 
+    /**
+     * Welche App steht gerade im Vordergrund? ``null``, wenn unbekannt.
+     *
+     * Wird vor jeder Bildschirm-Aufnahme gefragt (Phase 6), damit gesperrte
+     * Apps gar nicht erst aufgenommen werden.
+     */
+    fun currentForegroundPackage(): String? {
+        val verwalter = context.getSystemService(Context.USAGE_STATS_SERVICE)
+            as? UsageStatsManager ?: return null
+        val jetzt = System.currentTimeMillis()
+        val ereignisse = verwalter.queryEvents(jetzt - VORDERGRUND_FENSTER, jetzt)
+        val ereignis = UsageEvents.Event()
+        var letztes: String? = null
+        while (ereignisse.hasNextEvent()) {
+            ereignisse.getNextEvent(ereignis)
+            if (ereignis.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                letztes = ereignis.packageName
+            }
+        }
+        return letztes
+    }
+
     /** Anzeigename einer App; unbekannt bleibt unbekannt. */
     private fun beschriftung(paket: String): String? = try {
         val verwaltung = context.packageManager
@@ -147,5 +169,8 @@ class UsageCollector(private val context: Context) {
 
         /** Mehr als das nimmt die Gegenstelle ohnehin nicht an. */
         private const val MAX_APPS = 200
+
+        /** So weit wird für den Vordergrund zurückgeschaut (10 Minuten). */
+        private const val VORDERGRUND_FENSTER = 10 * 60 * 1000L
     }
 }

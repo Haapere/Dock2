@@ -59,6 +59,53 @@ class SyncClient(private val settings: Settings) {
         }
     }
 
+    /**
+     * Eine Bildschirm-Aufnahme übertragen (POST /api/android/bildschirm).
+     *
+     * Der Rumpf ist das PNG selbst; Gerät und App stehen in den Kopfzeilen.
+     * Auf dem Rechner läuft die Texterkennung, dort greift die Ausschlussliste,
+     * dort wird das Bild gelöscht.
+     */
+    fun sendScreen(png: ByteArray, paket: String): SyncAntwort {
+        val adresse = settings.serverUrl.trimEnd('/') + PFAD_BILDSCHIRM
+        var verbindung: HttpURLConnection? = null
+        return try {
+            verbindung = (URL(adresse).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = VERBINDUNG_TIMEOUT
+                readTimeout = ANTWORT_TIMEOUT
+                setRequestProperty("Authorization", "Bearer ${settings.token}")
+                setRequestProperty("Content-Type", "image/png")
+                setRequestProperty("X-FokusRadar-Geraet", settings.deviceName)
+                setRequestProperty("X-FokusRadar-Paket", paket)
+                setFixedLengthStreamingMode(png.size)
+                doOutput = true
+            }
+            verbindung.outputStream.use { strom -> strom.write(png) }
+            val code = verbindung.responseCode
+            val strom = if (code in 200..299) verbindung.inputStream else verbindung.errorStream
+            val text = strom?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) {
+                return SyncAntwort(false, code, lesbar(text))
+            }
+            val daten = runCatching { JSONObject(text) }.getOrNull()
+            when {
+                daten == null -> SyncAntwort(true, code, "Aufnahme gesendet.")
+                daten.optString("status") == "ausgeschlossen" ->
+                    SyncAntwort(true, code, "Aufnahme verworfen: steht auf der Ausschlussliste.")
+                else -> SyncAntwort(
+                    true, code,
+                    "Aufnahme gesendet, ${daten.optInt("zeichen")} Zeichen Text erkannt.",
+                )
+            }
+        } catch (fehler: IOException) {
+            Log.w(TAG, "Aufnahme konnte nicht gesendet werden", fehler)
+            SyncAntwort(false, 0, fehler.message ?: "unbekannter Netzwerkfehler")
+        } finally {
+            verbindung?.disconnect()
+        }
+    }
+
     /** Die Zahlen in genau die Form bringen, die die Gegenstelle erwartet. */
     private fun baueRumpf(tage: List<DayUsage>): String {
         val listeTage = JSONArray()
@@ -129,6 +176,7 @@ class SyncClient(private val settings: Settings) {
         private const val TAG = "FokusRadarSync"
         private const val PFAD_STATUS = "/api/android/status"
         private const val PFAD_NUTZUNG = "/api/android/nutzung"
+        private const val PFAD_BILDSCHIRM = "/api/android/bildschirm"
         private const val VERBINDUNG_TIMEOUT = 10_000
         private const val ANTWORT_TIMEOUT = 20_000
     }

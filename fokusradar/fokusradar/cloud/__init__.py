@@ -27,8 +27,12 @@ from fokusradar.cloud.prompts import (
     build_week_payload,
     collect_ocr_snippets,
 )
+from fokusradar.cloud.vision import ImageError, ImageInfo, inspect_image
 
 __all__ = [
+    "ImageError",
+    "ImageInfo",
+    "inspect_image",
     "API_KEY_ENV_VAR",
     "PRICE_DATE",
     "SUPPORTED_MODELS",

@@ -81,6 +81,11 @@ woechentlich_am = "sonntag"
 # Text aus der lokalen Texterkennung mitsenden. Aus gutem Grund aus:
 # OCR-Text kann alles enthalten, was auf dem Bildschirm stand.
 ocr_mitsenden = false
+# Einzelne Bildschirmfotos zur Bild-Analyse senden (Phase 6). Das ist die
+# weitreichendste Freigabe: hier verlässt ein ganzes Bild das Gerät. Sie wirkt
+# nur bei "fokusradar bild"; die Erfassung schickt nie von allein ein Bild.
+#   fokusradar bild --zeigen   zeigt vorher, was hinausginge
+bilder_senden = false
 # Eigene Preise je Million Token (überschreibt die eingebaute Tabelle)
 preis_input = 0
 preis_output = 0

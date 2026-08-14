@@ -80,10 +80,18 @@ class ScreenshotRecord:
     ocr_text: str | None
     screenshot_path: str | None
     deleted_at: datetime | None
+    #: Woher die Aufnahme kam; ``None`` heißt: von diesem Rechner (ab Phase 6).
+    device: str | None = None
+    #: Programm bzw. App-Paket im Vordergrund (ab Phase 6).
+    context: str | None = None
 
     @property
     def image_available(self) -> bool:
         return self.screenshot_path is not None and self.deleted_at is None
+
+    @property
+    def source_label(self) -> str:
+        return self.device or "Rechner"
 
 
 @dataclass(frozen=True)
@@ -487,6 +495,28 @@ class Database:
         )
         return len(neue)
 
+    def add_suggestion(
+        self, day: date, source: str, text: str, category: str | None = None
+    ) -> int | None:
+        """Einen einzelnen Vorschlag ergänzen, ohne vorhandene anzurühren.
+
+        Für die Bild-Analyse (Phase 6): sie kommt zusätzlich zur Tagesanalyse,
+        darf deren Vorschläge also nicht ersetzen. Doppelte und bereits
+        weggeklickte Texte werden übergangen; Rückgabe ist dann ``None``.
+        """
+        vorhanden = self.connection.execute(
+            "SELECT 1 FROM suggestions WHERE date = ? AND suggestion_text = ? LIMIT 1",
+            (day.isoformat(), text),
+        ).fetchone()
+        if vorhanden is not None:
+            return None
+        cursor = self.connection.execute(
+            "INSERT INTO suggestions (date, source, suggestion_text, category)"
+            " VALUES (?, ?, ?, ?)",
+            (day.isoformat(), source, text, category),
+        )
+        return int(cursor.lastrowid)
+
     def suggestions(
         self, *, day: date | None = None, include_dismissed: bool = False
     ) -> list[Suggestion]:
@@ -581,16 +611,21 @@ class Database:
         ocr_text: str | None = None,
         screenshot_path: str | None = None,
         deleted_at: datetime | None = None,
+        device: str | None = None,
+        context: str | None = None,
     ) -> int:
         """Screenshot-Eintrag speichern (Text und/oder Ablageort des Bildes)."""
         cursor = self.connection.execute(
-            "INSERT INTO screenshots_meta (timestamp, ocr_text, screenshot_path, deleted_at)"
-            " VALUES (?, ?, ?, ?)",
+            "INSERT INTO screenshots_meta"
+            " (timestamp, ocr_text, screenshot_path, deleted_at, device, context)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (
                 timeutil.isoformat(at),
                 ocr_text,
                 screenshot_path,
                 timeutil.isoformat(deleted_at) if deleted_at else None,
+                device,
+                context,
             ),
         )
         return int(cursor.lastrowid)
@@ -603,15 +638,25 @@ class Database:
         )
 
     def screenshots(
-        self, *, day: date | None = None, limit: int | None = None
+        self,
+        *,
+        day: date | None = None,
+        limit: int | None = None,
+        device: str | None = None,
     ) -> list[ScreenshotRecord]:
         """Screenshot-Einträge, neueste zuerst."""
         query = "SELECT * FROM screenshots_meta"
+        bedingungen: list[str] = []
         params: list[object] = []
         if day is not None:
             start, end = timeutil.local_day_bounds(day)
-            query += " WHERE timestamp >= ? AND timestamp < ?"
+            bedingungen.append("timestamp >= ? AND timestamp < ?")
             params += [start, end]
+        if device is not None:
+            bedingungen.append("device = ?")
+            params.append(device)
+        if bedingungen:
+            query += " WHERE " + " AND ".join(bedingungen)
         query += " ORDER BY timestamp DESC, id DESC"
         if limit is not None:
             query += " LIMIT ?"
@@ -623,6 +668,8 @@ class Database:
                 ocr_text=row["ocr_text"],
                 screenshot_path=row["screenshot_path"],
                 deleted_at=timeutil.parse(row["deleted_at"]) if row["deleted_at"] else None,
+                device=row["device"],
+                context=row["context"],
             )
             for row in self.connection.execute(query, params)
         ]

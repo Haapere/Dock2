@@ -131,6 +131,11 @@ woechentlich_am = "sonntag"
 # Text aus der lokalen Texterkennung mitsenden. Aus gutem Grund aus:
 # OCR-Text kann alles enthalten, was auf dem Bildschirm stand.
 ocr_mitsenden = false
+# Einzelne Bildschirmfotos zur Bild-Analyse senden (Phase 6). Das ist die
+# weitreichendste Freigabe: hier verlässt ein ganzes Bild das Gerät. Sie wirkt
+# nur bei "fokusradar bild"; die Erfassung schickt nie von allein ein Bild.
+#   fokusradar bild --zeigen   zeigt vorher, was hinausginge
+bilder_senden = false
 # Eigene Preise je Million Token (überschreibt die eingebaute Tabelle)
 preis_input = 0
 preis_output = 0
@@ -223,6 +228,8 @@ class CloudConfig:
     daily_after: str | None = "18:00"
     weekly_on: str | None = "sonntag"
     send_ocr: bool = False
+    #: Bildschirmfotos an die API geben (Phase 6) — nur von Hand, nie automatisch.
+    send_images: bool = False
     #: Eigener Tarif in US-Dollar je Million Token; 0 = eingebaute Preistabelle.
     price_input: float = 0.0
     price_output: float = 0.0
@@ -566,6 +573,7 @@ def load_config(path: Path | None = None) -> Config:
         daily_after=taeglich.strip() or None,
         weekly_on=woechentlich.strip().lower() or None,
         send_ocr=_boolean(cloud_section, "ocr_mitsenden", False),
+        send_images=_boolean(cloud_section, "bilder_senden", False),
         price_input=_optional_price(cloud_section, "preis_input"),
         price_output=_optional_price(cloud_section, "preis_output"),
     )

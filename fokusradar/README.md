@@ -2,7 +2,7 @@
 
 Ein Aktivitäts-Monitor für den eigenen Rechner: Er erfasst im Hintergrund, **welches Programm gerade aktiv ist** und **wie viel wirklich gearbeitet wird**, speichert das ausschließlich lokal — und leitet daraus später konkrete Verbesserungsvorschläge zu Fokus und Bedienung ab.
 
-> **Stand: Phase 5 von 6.** Erfassung, Kategorisierung, lokale Auswertung, Dashboard, Ausschlussliste, Screenshots mit lokaler OCR, verschlüsselte Datenbank, die Cloud-Analyse über die Claude-API und der Android-Begleiter stehen. Offen ist nur noch die optionale Phase 6 (siehe [Fahrplan](#fahrplan)).
+> **Stand: alle sechs Phasen stehen.** Erfassung, Kategorisierung, lokale Auswertung, Dashboard, Ausschlussliste, Screenshots mit lokaler OCR, verschlüsselte Datenbank, Cloud-Analyse über die Claude-API, Android-Begleiter und — als letzte, bewusst am festesten verriegelte Ausbaustufe — die Bild-Analyse einzelner Screenshots (siehe [Fahrplan](#fahrplan)).
 
 ## Was erfasst wird — und was nicht
 
@@ -14,7 +14,8 @@ Ein Aktivitäts-Monitor für den eigenen Rechner: Er erfasst im Hintergrund, **w
 | Sekunden seit der letzten Eingabe (Idle-Zeit) | *welche* Taste gedrückt wurde |
 | Anzahl der Eingaben pro Messpunkt (optional) | Bildschirminhalt, solange Screenshots aus sind (Vorgabe) |
 | Screenshot-Text, wenn eingeschaltet (Bild wird danach gelöscht) | — |
-| App-Nutzung des Handys in Sekunden, wenn der Begleiter eingerichtet ist | Inhalte, Benachrichtigungen oder Bildschirm des Handys |
+| App-Nutzung des Handys in Sekunden, wenn der Begleiter eingerichtet ist | Inhalte oder Benachrichtigungen des Handys |
+| Text aus Handy-Aufnahmen, wenn beides eingeschaltet ist (Bild wird danach gelöscht) | Bildschirm des Handys, solange die Aufnahmen aus sind (Vorgabe) |
 
 Alle Daten liegen in **einer lokalen SQLite-Datei**, auf Wunsch mit SQLCipher verschlüsselt. Ohne `[cloud] aktiv = true` gibt es keinerlei Netzwerkzugriff — keine Telemetrie, keine Ausnahmen. Das Dashboard ist ein Server auf `localhost`, der nur die eigene Datenbank liest.
 
@@ -85,6 +86,10 @@ fokusradar kosten
 # 8. Handy anbinden (Zahlen der App-Nutzung aus dem Heimnetz)
 fokusradar android --token-neu
 fokusradar android
+
+# 9. Bild-Analyse: erst ansehen, was rausginge — dann fragen
+fokusradar bild --zeigen
+fokusradar bild --neu
 ```
 
 Tagesangaben verstehen `heute`, `gestern`, `-3` (vor drei Tagen) und `2026-08-13`.
@@ -298,6 +303,44 @@ Ein Tagesaufruf liegt bei etwa 1.500-3.000 Token hinein und einigen hundert hina
 
 Zwei Hinweise zu den Zahlen: Die 2 $/10 $ für Sonnet 5 sind ein **Einführungspreis bis 31.08.2026**, danach gelten 3 $/15 $ — der Bauplan rechnet noch mit dem Einführungspreis. Und die Beträge hier sind Schätzungen aus der Token-Zahl; maßgeblich ist die Abrechnung von Anthropic. Eigene Konditionen lassen sich über `preis_input`/`preis_output` hinterlegen.
 
+## Bild-Analyse einzelner Screenshots
+
+Die letzte Ausbaustufe — und die einzige, bei der ein **ganzes Bild** das Gerät verlässt. Überall sonst geht nur Verdichtetes hinaus: Zahlen, Prozessnamen, allenfalls erkannter Text. Hier sieht das Modell, was in dem Moment am Bildschirm stand. Dafür kommen Vorschläge zurück, die aus Zahlen nicht abzuleiten sind: wie die Fenster liegen, welcher Handgriff kürzer ginge, was im Weg steht.
+
+**Vier Schlösser, alle müssen offen sein:**
+
+1. `[cloud] aktiv = true` — ohne das gibt es überhaupt keine Verbindung.
+2. `[cloud] bilder_senden = true` — ein eigener Schalter, Vorgabe aus.
+3. Ein Aufruf von Hand. Die Erfassung schickt **nie** von sich aus ein Bild — anders als bei der Tagesanalyse gibt es hier keine Automatik und keine Uhrzeit.
+4. Das Fenster darf nicht auf der Ausschlussliste stehen.
+
+```bash
+fokusradar bild --zeigen            # was ginge hinaus? Ohne Netzwerkzugriff
+fokusradar bild                     # die neueste noch vorhandene Aufnahme
+fokusradar bild --neu               # jetzt eine machen und die nehmen
+fokusradar bild --datei bild.png    # eine bestimmte Aufnahme
+```
+
+```
+Aufnahme:  ~/.local/share/fokusradar/screenshots/2026-08-14_10-15-03.png
+Umfang:    412 KB, 1920×1080 Pixel
+Bild-Token: ~2764, geschätzt <0,01 $ für das Bild
+Kontext:   Im Vordergrund war code.exe.
+Modell:    claude-sonnet-5
+
+Vorschläge (2):
+  • [fenster] Editor und Browser liegen übereinander. Nebeneinander sparst du
+    den Wechsel — Windows-Taste und Pfeiltaste legt beide je zur Hälfte.
+  • [ablenkung] In der Leiste stehen 14 offene Tabs. Was du heute nicht mehr
+    brauchst, gehört in ein Lesezeichen statt in die Leiste.
+```
+
+Der Auftrag an das Modell verbietet ausdrücklich, **Inhalte wiederzugeben** — keine Namen, Beträge, Texte oder Codezeilen, auch nicht als Beispiel. Gesprochen wird nur über Programme, Fenster und Bedienschritte. Nachlesen lässt sich das in [`fokusradar/cloud/vision.py`](fokusradar/cloud/vision.py), vollständig ausgeben mit `fokusradar bild --zeigen`.
+
+Nach der Analyse wird die Aufnahme gelöscht, sofern sie eigens dafür entstanden ist (`--neu`) oder Screenshots ohnehin abgeschaltet sind; `--behalten` lässt sie liegen. Die Vorschläge landen als zusätzliche Cloud-Vorschläge des Tages im Dashboard, der Verbrauch als Art `bild` in `fokusradar kosten`.
+
+Ein Bild kostet je nach Auflösung 1.500–4.800 Token — mit Sonnet 5 unter einem Cent. Der Aufruf lohnt sich trotzdem nicht im Minutentakt: dafür ist er nicht gedacht und wäre er auch nicht gebaut.
+
 ## Android-Begleiter
 
 Eine kleine App fürs Handy zählt, wie lange welche App im Vordergrund war, und schickt diese Zahlen im Heimnetz an das Dashboard. Damit steht die Bildschirmzeit des Handys in derselben Tagesansicht wie die des Rechners. Quelltext und Bauanleitung: [`android-companion/`](android-companion/README.md).
@@ -346,6 +389,23 @@ Ein Sync schickt immer den vollen Stand der letzten Tage, keine Differenz; ein T
 
 Die Pakete laufen durch dieselben Regeln wie die Programme (`categories.yaml`): der Paketname steht an der Stelle des Prozesses, der App-Name an der Stelle des Fenstertitels. Gängige Pakete sind in den eingebauten Regeln schon einsortiert.
 
+### Bildschirm-Aufnahmen vom Handy
+
+Optional und getrennt einzuschalten: die App kann in großen Abständen ein Bild des Handy-Bildschirms aufnehmen und an den Rechner schicken (`POST /api/android/bildschirm`). Dort passiert damit genau das, was am Rechner auch mit einem Screenshot passiert — **Text lokal erkennen, Text speichern, Bild löschen**. Ins Internet geht davon nichts; die Bild-Analyse oben ist ein anderer, eigens einzuschaltender Weg.
+
+Zwei Filter greifen, bevor irgendetwas gespeichert wird:
+
+* **auf dem Handy**, vor der Aufnahme: steht eine App aus der Sperrliste im Vordergrund, entsteht gar kein Bild. Vorbelegt sind Bank, Passwortspeicher und Messenger.
+* **auf dem Rechner**, vor dem Schreiben: passt der Paketname auf die Ausschlussliste, wird das Bild verworfen, ohne es anzusehen und ohne es auf die Platte zu legen. Die eingebaute Vorlage deckt `*bank*`, `*sparkasse*`, `*paypal*`, `*password*` und `*authenticator*` ab.
+
+Ohne `[screenshots] aktiv = true` nimmt der Rechner gar nichts an (409): wer am Rechner keine Screenshots will, bekommt auch keine vom Handy untergeschoben. Solange aufgenommen wird, zeigt Android eine Benachrichtigung, über die sich das sofort beenden lässt — und die Freigabe erlischt mit jedem Neustart der App.
+
+Ansehen lässt sich das Ergebnis wie alles andere:
+
+```bash
+fokusradar screenshots       # Zeit, Gerät, App, erkannte Zeichen
+```
+
 ## Konfiguration
 
 ```bash
@@ -376,6 +436,7 @@ Ohne Konfigurationsdatei gelten die Vorgabewerte — FokusRadar ist also sofort 
 | `modell` / `aufwand` | `claude-sonnet-5` / `medium` | Modell und Denk-Aufwand der Cloud-Analyse |
 | `taeglich_ab` / `woechentlich_am` | `"18:00"` / `"sonntag"` | wann die Erfassung selbst fragt |
 | `ocr_mitsenden` | `false` | OCR-Text an die Cloud mitsenden |
+| `bilder_senden` | `false` | Bild-Analyse erlauben — nur für `fokusradar bild`, nie automatisch |
 | `aktiv` (Android) | `false` | Sync-Endpunkt für das Handy einschalten |
 | `token` (Android) | leer | gemeinsames Geheimnis, erzeugt von `fokusradar android --token-neu` |
 | `host` / `port` | `127.0.0.1` / 8760 | Adresse des Dashboards |
@@ -414,8 +475,8 @@ fokusradar/
 │   ├── capture/            # aktives Fenster, Idle-Zeit, Eingaben, Screenshots
 │   ├── processing/         # Kategorien, Ausschlussliste, Fokus-/Ablenkungsanalyse
 │   ├── storage/            # SQLite-Schema, Abfragen, Verschlüsselung
-│   ├── cloud/              # Claude-API: Nutzlast, Aufruf, Kosten
-│   ├── android/            # Gegenstelle für den Sync des Handys
+│   ├── cloud/              # Claude-API: Nutzlast, Aufruf, Kosten, Bild-Analyse
+│   ├── android/            # Gegenstelle für Sync und Aufnahmen des Handys
 │   └── dashboard/          # FastAPI-App + Jinja2-Templates
 ├── android-companion/      # die App fürs Handy (Kotlin, Gradle)
 ├── config/                 # Vorlagen: config, categories.yaml, exclusions.yaml
@@ -426,7 +487,7 @@ Die Erfassung steckt hinter zwei schmalen Schnittstellen (`WindowBackend`, `Idle
 
 ### Datenmodell
 
-Das Schema folgt Abschnitt 6 des Bauplans und ist vollständig in Gebrauch: `window_events` und `activity_level` von der Erfassung, `daily_summaries` und `suggestions` von der Auswertung, `screenshots_meta` von der OCR-Kette und `exclusion_list` von der Ausschlussliste. Dazu kommen zwei Tabellen, die der Bauplan nicht ausdrücklich nennt: `api_usage` (Phase 4) — ohne sie ließe sich das geforderte Kosten-Tracking nicht führen — und `android_usage` (Phase 5) für die Zahlen des Handys, eine Zeile je Gerät, Tag und Paket.
+Das Schema folgt Abschnitt 6 des Bauplans und ist vollständig in Gebrauch: `window_events` und `activity_level` von der Erfassung, `daily_summaries` und `suggestions` von der Auswertung, `screenshots_meta` von der OCR-Kette und `exclusion_list` von der Ausschlussliste. Dazu kommen zwei Tabellen, die der Bauplan nicht ausdrücklich nennt: `api_usage` (Phase 4) — ohne sie ließe sich das geforderte Kosten-Tracking nicht führen — und `android_usage` (Phase 5) für die Zahlen des Handys, eine Zeile je Gerät, Tag und Paket. In Phase 6 bekommt `screenshots_meta` zwei Spalten dazu (`device`, `context`), damit Aufnahmen vom Handy von denen des Rechners zu unterscheiden sind; ältere Datenbanken werden beim Öffnen nachgezogen.
 
 Eine Ergänzung gibt es bei `window_events`: die Spalten `ended_at` und `duration_seconds`. FokusRadar schreibt **eine Zeile je zusammenhängender Fensternutzung** statt einer Zeile alle drei Sekunden. Das spart rund 99 % der Zeilen, macht die Fokus-Sessions aus Phase 2 zu einer einfachen Abfrage — und weil das Ende laufend fortgeschrieben wird, kostet ein Absturz höchstens ein Erfassungsintervall.
 
@@ -449,7 +510,7 @@ python -m pytest -q
 - [x] **Phase 3 — Screenshots & OCR:** periodische Screenshots, lokale OCR, Ausschlussliste, Smart Pause, DB-Verschlüsselung
 - [x] **Phase 4 — Cloud-Hybrid:** Claude-API-Anbindung für die Vorschläge, Prompt-Vorlagen, Kosten-Tracking
 - [x] **Phase 5 — Android-Begleiter:** App-Nutzungsstatistik via `UsageStatsManager`, Sync ins Heimnetz
-- [ ] **Phase 6 — optional:** Android-Screen-Monitoring, Vision-Analyse einzelner Screenshots
+- [x] **Phase 6 — optional:** Bildschirm-Aufnahmen vom Handy via `MediaProjection`, Bild-Analyse einzelner Screenshots
 
 ## Hinweis
 

@@ -29,6 +29,42 @@ def test_schema_wird_angelegt_und_ist_idempotent(tmp_path):
     }
     assert all(count == 0 for count in counts.values())
 
+
+def test_aeltere_datenbank_bekommt_die_neuen_spalten(tmp_path):
+    """Eine Datenbank aus Phase 3 wird beim Öffnen nachgezogen.
+
+    ``CREATE TABLE IF NOT EXISTS`` rührt eine vorhandene Tabelle nicht an —
+    ohne die Migration fehlten der alten Datenbank die Spalten aus Phase 6.
+    """
+    import sqlite3
+
+    path = tmp_path / "alt.sqlite"
+    with sqlite3.connect(path) as verbindung:
+        verbindung.execute(
+            "CREATE TABLE screenshots_meta ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME NOT NULL,"
+            " ocr_text TEXT, screenshot_path TEXT, deleted_at DATETIME)"
+        )
+        verbindung.execute(
+            "INSERT INTO screenshots_meta (timestamp, ocr_text)"
+            " VALUES ('2026-08-01T09:00:00+00:00', 'alter Text')"
+        )
+        verbindung.execute("PRAGMA user_version = 3")
+
+    with Database(path) as db:
+        spalten = {
+            row[1] for row in db.connection.execute("PRAGMA table_info(screenshots_meta)")
+        }
+        eintraege = db.screenshots()
+        version = db.connection.execute("PRAGMA user_version").fetchone()[0]
+
+    assert {"device", "context"} <= spalten
+    assert version == SCHEMA_VERSION
+    # Der alte Eintrag ist noch da und gilt jetzt als Aufnahme dieses Rechners.
+    assert [e.ocr_text for e in eintraege] == ["alter Text"]
+    assert eintraege[0].device is None
+    assert eintraege[0].source_label == "Rechner"
+
     # Zweites Öffnen darf nichts kaputt machen.
     with Database(path) as db:
         assert db.table_counts()["window_events"] == 0

@@ -6,9 +6,12 @@ Damit steht die Bildschirmzeit des Handys neben der des Rechners in derselben
 Tagesansicht.
 
 Was das Handy verlässt: **Paketname, App-Name, Sekunden, Anzahl der Aufrufe** —
-je App und Tag. Keine Inhalte, keine Benachrichtigungen, keine Bildschirmfotos.
-Und es verlässt das Handy nur in Richtung des einen Rechners, dessen Adresse in
-den Einstellungen der App steht.
+je App und Tag. Keine Inhalte und keine Benachrichtigungen. Und es verlässt das
+Handy nur in Richtung des einen Rechners, dessen Adresse in den Einstellungen
+der App steht.
+
+Bildschirmfotos schickt die App nur, wenn man sie eigens dafür einschaltet —
+siehe [Bildschirm-Aufnahmen](#bildschirm-aufnahmen-optional) weiter unten.
 
 ## Voraussetzungen auf dem Rechner
 
@@ -90,6 +93,38 @@ eingebauten Regeln schon einsortiert; eigene Apps trägt man dort nach:
       - com.instagram.android
       - de.meinspiel.app
 ```
+
+## Bildschirm-Aufnahmen (optional)
+
+Getrennt einzuschalten und standardmäßig aus: die App kann in großen Abständen
+ein Bild des Bildschirms aufnehmen und an den Rechner schicken. Dort wird der
+Text lokal erkannt, der Text gespeichert und das Bild gelöscht — genau wie bei
+den Aufnahmen des Rechners. **Ins Internet geht davon nichts.**
+
+So läuft es ab:
+
+1. Abstand einstellen (Vorgabe 30 Minuten) und die Sperrliste durchsehen.
+2. **Aufnahmen starten** — Android fragt selbst nach der Freigabe. Sie gilt nur
+   für diese Sitzung und erlischt beim Beenden der App oder des Dienstes.
+3. Solange aufgenommen wird, steht eine Benachrichtigung in der Leiste. Ein
+   Tippen darauf beendet es sofort.
+
+Zwei Filter greifen, bevor irgendetwas gespeichert wird:
+
+* **auf dem Handy**, vor der Aufnahme: steht eine App aus der Sperrliste im
+  Vordergrund, entsteht gar kein Bild. Vorbelegt sind Bank, Passwortspeicher,
+  Authenticator und Messenger; die Liste lässt sich in der App ergänzen (ein
+  Suchwort je Zeile, Teiltreffer genügt).
+* **auf dem Rechner**, vor dem Schreiben: passt der Paketname auf die
+  Ausschlussliste, wird das Bild verworfen, ohne es anzusehen und ohne es
+  überhaupt auf die Platte zu legen.
+
+Der Rechner nimmt nur an, wenn dort `[screenshots] aktiv = true` gesetzt ist —
+sonst antwortet er mit 409. Wer am Rechner keine Screenshots will, bekommt auch
+keine vom Handy untergeschoben.
+
+Übertragen wird ein PNG mit höchstens 1280 Pixeln an der langen Kante; das
+reicht für die Texterkennung und hält die Übertragung klein.
 
 ## Grenzen
 

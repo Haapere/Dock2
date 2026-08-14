@@ -29,6 +29,8 @@ from pathlib import Path
 
 from fokusradar import __version__, timeutil
 from fokusradar.agent import Tracker
+from fokusradar.capture import create_screenshot_backend, create_window_backend
+from fokusradar.capture.screenshots import screenshot_filename
 from fokusradar.cloud import (
     PRICE_DATE,
     CloudAnalyzer,
@@ -39,6 +41,7 @@ from fokusradar.cloud import (
     format_usd,
     price_for,
 )
+from fokusradar.cloud import vision
 from fokusradar.android import sync as android_sync
 from fokusradar.config import (
     Config,
@@ -205,6 +208,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="auch dann fragen, wenn für den Tag schon Cloud-Vorschläge vorliegen",
     )
     cloud.set_defaults(func=_cmd_cloud)
+
+    bild = subparsers.add_parser(
+        "bild", help="einzelnes Bildschirmfoto ansehen lassen (Bild-Analyse)"
+    )
+    bild.add_argument(
+        "--datei", type=Path, metavar="PFAD", help="bestimmte Aufnahme statt der neuesten"
+    )
+    bild.add_argument(
+        "--neu", action="store_true", help="jetzt eine Aufnahme machen und die nehmen"
+    )
+    bild.add_argument(
+        "--zeigen",
+        action="store_true",
+        help="nur anzeigen, was hinausginge — ohne Netzwerkzugriff",
+    )
+    bild.add_argument(
+        "--behalten",
+        action="store_true",
+        help="die Aufnahme nach der Analyse nicht löschen",
+    )
+    bild.set_defaults(func=_cmd_bild)
 
     kosten = subparsers.add_parser(
         "kosten", help="Verbrauch und Kosten der Cloud-Analyse anzeigen"
@@ -695,7 +719,10 @@ def _cmd_screenshots(args: argparse.Namespace, config: Config) -> int:
             if eintrag.image_available
             else "Bild gelöscht"
         )
-        print(f"{zeitpunkt}  {len(text):>5} Zeichen  {verbleib}")
+        woher = f"{_shorten(eintrag.source_label, 12):<12}"
+        if eintrag.context:
+            woher += f" {_shorten(eintrag.context, 22):<22}"
+        print(f"{zeitpunkt}  {woher}  {len(text):>5} Zeichen  {verbleib}")
         if args.text and text:
             for zeile in text.splitlines():
                 print(f"    {zeile}")
@@ -838,6 +865,189 @@ def _cmd_cloud(args: argparse.Namespace, config: Config) -> int:
         f"{ergebnis.output_tokens} hinaus — etwa {format_usd(ergebnis.cost_usd)}"
     )
     return 0
+
+
+def _cmd_bild(args: argparse.Namespace, config: Config) -> int:
+    """Bild-Analyse: ein einzelnes Bildschirmfoto ansehen lassen (Phase 6)."""
+    aufnahme, frisch = _bild_waehlen(args, config)
+    if aufnahme is None:
+        return 1
+
+    try:
+        info = vision.inspect_image(aufnahme)
+    except vision.ImageError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    kontext = _bild_kontext(config)
+    tarif = price_for(config.cloud.model)
+    schaetzung = ""
+    if tarif is not None:
+        kosten = info.estimated_tokens / 1_000_000 * tarif.input_per_mtok
+        schaetzung = f", geschätzt {format_usd(kosten)} für das Bild"
+
+    print(f"Aufnahme:  {info.path}")
+    print(f"Umfang:    {info.size_text}")
+    print(f"Bild-Token: ~{info.estimated_tokens}{schaetzung}")
+    print(f"Kontext:   {kontext or '—'}")
+    print(f"Modell:    {config.cloud.model}")
+
+    if args.zeigen:
+        print(
+            "\nDas ginge hinaus: das Bild oben — vollständig, so wie es ist — "
+            "und der Kontextsatz.\nDer Auftrag an das Modell:\n"
+        )
+        for zeile in vision.VISION_SYSTEM_PROMPT.splitlines():
+            print(f"  {zeile}")
+        print("\nGesendet wurde nichts (--zeigen).")
+        return 0
+
+    if not config.cloud.enabled:
+        print(
+            "\nDie Cloud-Analyse ist abgeschaltet ([cloud] aktiv = false).",
+            file=sys.stderr,
+        )
+        return 3
+    if not config.cloud.send_images:
+        print(
+            "\nDas Senden von Bildern ist abgeschaltet.\n"
+            "Ein Bild zeigt alles, was in dem Moment am Bildschirm stand. Wenn du "
+            "das willst,\nsetze in der Konfiguration [cloud] bilder_senden = true.",
+            file=sys.stderr,
+        )
+        return 3
+
+    analyzer = CloudAnalyzer(config)
+    print("\nFrage die Bild-Analyse …")
+    try:
+        ergebnis = analyzer.analyze_image(info.path, context=kontext)
+    except CloudError as exc:
+        print(str(exc), file=sys.stderr)
+        return 3
+
+    heute = timeutil.parse_day("heute")
+    with _open_database(config) as database:
+        database.record_api_usage(
+            timeutil.now_utc(),
+            day=heute,
+            kind="bild",
+            model=ergebnis.model,
+            input_tokens=ergebnis.input_tokens,
+            output_tokens=ergebnis.output_tokens,
+            cache_read_tokens=ergebnis.cache_read_tokens,
+            cache_write_tokens=ergebnis.cache_write_tokens,
+            cost_usd=ergebnis.cost_usd,
+        )
+        if ergebnis.suggestions:
+            for text, kategorie in ergebnis.suggestions:
+                database.add_suggestion(heute, "cloud", text, f"bild/{kategorie}")
+
+    if not args.behalten and (frisch or not config.screenshots.enabled):
+        try:
+            info.path.unlink()
+            print(f"Aufnahme gelöscht: {info.path}")
+        except OSError as exc:  # pragma: no cover - Datei ist schon weg o. Ä.
+            print(f"Aufnahme ließ sich nicht löschen: {exc}", file=sys.stderr)
+
+    if ergebnis.refused:
+        print("\nDas Modell hat die Antwort abgelehnt.")
+        return 0
+    if not ergebnis.suggestions:
+        print("\nKeine Vorschläge — auf dem Bild ist nichts aufgefallen.")
+    else:
+        print(f"\nVorschläge ({len(ergebnis.suggestions)}):")
+        for text, kategorie in ergebnis.suggestions:
+            print(f"  • [{kategorie}] {text}")
+    print(
+        f"\nVerbrauch: {ergebnis.input_tokens} hinein, {ergebnis.output_tokens} hinaus"
+        f" — {format_usd(ergebnis.cost_usd)} (geschätzt)"
+    )
+    return 0
+
+
+def _bild_waehlen(
+    args: argparse.Namespace, config: Config
+) -> tuple[Path | None, bool]:
+    """Aufnahme bestimmen: angegeben, frisch aufgenommen oder die neueste.
+
+    Rückgabe: (Pfad, frisch aufgenommen). ``None`` heißt: es gibt keine.
+    """
+    if args.datei is not None:
+        return Path(args.datei).expanduser(), False
+
+    if args.neu:
+        return _bild_aufnehmen(config), True
+
+    with _open_database(config) as database:
+        eintraege = database.screenshots(limit=25)
+    for eintrag in eintraege:
+        if eintrag.image_available and Path(eintrag.screenshot_path).is_file():
+            return Path(eintrag.screenshot_path), False
+
+    print(
+        "Keine Aufnahme vorhanden, deren Bild noch da ist.\n"
+        "FokusRadar löscht Bilder nach der Texterkennung ([screenshots] "
+        "bild_loeschen = true).\n"
+        "Jetzt eine machen:      fokusradar bild --neu\n"
+        "Oder eine mitgeben:     fokusradar bild --datei PFAD",
+        file=sys.stderr,
+    )
+    return None, False
+
+
+def _bild_aufnehmen(config: Config) -> Path | None:
+    """Jetzt eine Aufnahme machen — aber nicht von einem gesperrten Fenster."""
+    fenster = create_window_backend()
+    info = fenster.snapshot() if fenster.available() else None
+    if info is not None:
+        with _open_database(config) as database:
+            liste = ExclusionList(list(database.exclusions()))
+        regel = liste.matching_rule(info.process_name, info.window_title)
+        if regel is not None:
+            print(
+                f"Nicht aufgenommen: {info.process_name} steht auf der "
+                f"Ausschlussliste ({regel.label}-Muster {regel.pattern!r}).",
+                file=sys.stderr,
+            )
+            return None
+        if info.process_name.casefold() in {
+            name.casefold() for name in config.capture.pause_processes
+        }:
+            print(
+                f"Nicht aufgenommen: {info.process_name} löst die Smart Pause aus.",
+                file=sys.stderr,
+            )
+            return None
+
+    backend = create_screenshot_backend(True)
+    if not backend.available():
+        print(
+            "Aufnahme nicht möglich — "
+            f"{backend.unavailable_reason() or 'kein Backend verfügbar'}",
+            file=sys.stderr,
+        )
+        return None
+    ziel = config.screenshot_dir / screenshot_filename(timeutil.now_utc())
+    bild = backend.capture(ziel)
+    if bild is None:
+        print(
+            "Aufnahme fehlgeschlagen — "
+            f"{backend.unavailable_reason() or 'unbekannter Grund'}",
+            file=sys.stderr,
+        )
+        return None
+    return bild
+
+
+def _bild_kontext(config: Config) -> str | None:
+    """Ein Satz zum aktiven Fenster — Prozessname, nie der Fenstertitel."""
+    fenster = create_window_backend()
+    if not fenster.available():
+        return None
+    info = fenster.snapshot()
+    if info is None:
+        return None
+    return f"Im Vordergrund war {info.process_name}."
 
 
 def _cmd_kosten(args: argparse.Namespace, config: Config) -> int:
@@ -1063,6 +1273,7 @@ def _cmd_config(args: argparse.Namespace, config: Config) -> int:
         print(f"  Täglich ab       {config.cloud.daily_after or '—'}")
         print(f"  Wochenrückblick  {config.cloud.weekly_on or '—'}")
         print(f"  OCR mitsenden    {config.cloud.send_ocr}")
+        print(f"  Bilder senden    {config.cloud.send_images}")
     print(f"API-Schlüssel      {config.env_path}")
     handy = "an" if config.android.enabled else "aus"
     if config.android.enabled and not config.android.token:
