@@ -25,6 +25,7 @@ def test_schema_wird_angelegt_und_ist_idempotent(tmp_path):
         "suggestions",
         "exclusion_list",
         "api_usage",
+        "android_usage",
     }
     assert all(count == 0 for count in counts.values())
 

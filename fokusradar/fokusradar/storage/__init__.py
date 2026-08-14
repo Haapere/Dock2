@@ -2,6 +2,7 @@
 
 from fokusradar.storage.db import (
     ActivitySample,
+    AndroidUsage,
     ApiUsage,
     AppTotal,
     Database,
@@ -12,6 +13,7 @@ from fokusradar.storage.db import (
 
 __all__ = [
     "ActivitySample",
+    "AndroidUsage",
     "ApiUsage",
     "AppTotal",
     "Database",

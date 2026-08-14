@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FokusRadar-Begleiter</string>
+
+    <string name="einleitung">Schickt die Bildschirmzeit dieses Handys an FokusRadar auf deinem Rechner. Die Zahlen bleiben im Heimnetz.</string>
+
+    <string name="label_adresse">Adresse des Rechners</string>
+    <string name="hinweis_adresse">z. B. http://192.168.1.42:8760 — steht in „fokusradar android“</string>
+    <string name="label_token">Token</string>
+    <string name="hinweis_token">aus „fokusradar android --token-neu“</string>
+    <string name="label_geraet">Name dieses Geräts</string>
+
+    <string name="knopf_berechtigung">Berechtigung erteilen</string>
+    <string name="knopf_pruefen">Verbindung testen</string>
+    <string name="knopf_senden">Jetzt senden</string>
+    <string name="knopf_speichern">Speichern</string>
+    <string name="schalter_automatisch">Einmal täglich von allein senden</string>
+
+    <string name="berechtigung_fehlt">Die Berechtigung „Nutzungsdaten“ fehlt noch.</string>
+    <string name="berechtigung_da">Berechtigung erteilt.</string>
+    <string name="gespeichert">Einstellungen gespeichert.</string>
+    <string name="unvollstaendig">Adresse und Token fehlen noch.</string>
+    <string name="laeuft">Läuft …</string>
+    <string name="ueberschrift_vorschau">Heute auf diesem Handy</string>
+</resources>

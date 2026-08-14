@@ -84,3 +84,10 @@ ocr_mitsenden = false
 # Eigene Preise je Million Token (überschreibt die eingebaute Tabelle)
 preis_input = 0
 preis_output = 0
+
+[android]
+# Sync des Android-Begleiters. Aus heißt: der Endpunkt antwortet mit 404.
+aktiv = false
+# Gemeinsames Geheimnis für das Handy. Neu erzeugen mit
+#   fokusradar android --token-neu
+token = ""

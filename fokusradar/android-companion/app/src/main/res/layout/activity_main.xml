@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/einleitung"
+            android:paddingBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_adresse"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/feld_adresse"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:autofillHints="url"
+            android:hint="@string/hinweis_adresse"
+            android:inputType="textUri" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_token"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/feld_token"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:autofillHints="password"
+            android:hint="@string/hinweis_token"
+            android:inputType="textVisiblePassword" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_geraet"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/feld_geraet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:autofillHints="name"
+            android:inputType="text" />
+
+        <CheckBox
+            android:id="@+id/schalter_automatisch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/schalter_automatisch" />
+
+        <Button
+            android:id="@+id/knopf_speichern"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/knopf_speichern" />
+
+        <Button
+            android:id="@+id/knopf_berechtigung"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/knopf_berechtigung" />
+
+        <Button
+            android:id="@+id/knopf_pruefen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/knopf_pruefen" />
+
+        <Button
+            android:id="@+id/knopf_senden"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/knopf_senden" />
+
+        <TextView
+            android:id="@+id/feld_meldung"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/ueberschrift_vorschau"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/feld_vorschau"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="13sp" />
+    </LinearLayout>
+</ScrollView>

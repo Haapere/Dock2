@@ -12,6 +12,7 @@
     fokusradar verschluesseln   # Datenbank auf SQLCipher umstellen
     fokusradar cloud      # Vorschläge über die Claude-API holen
     fokusradar kosten     # Verbrauch und Kosten der Cloud-Analyse
+    fokusradar android    # Begleiter auf dem Handy einrichten und ansehen
     fokusradar dashboard  # lokale Weboberfläche starten
     fokusradar config     # Konfiguration anzeigen oder anlegen
 """
@@ -38,7 +39,14 @@ from fokusradar.cloud import (
     format_usd,
     price_for,
 )
-from fokusradar.config import Config, ConfigError, load_config, write_default_config
+from fokusradar.android import sync as android_sync
+from fokusradar.config import (
+    Config,
+    ConfigError,
+    default_config_path,
+    load_config,
+    write_default_config,
+)
 from fokusradar.dashboard.app import DashboardUnavailable, run_dashboard
 from fokusradar.processing.analysis import analyze_day, last_days, store_analysis
 from fokusradar.processing.categories import (
@@ -203,6 +211,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     kosten.add_argument("--anzahl", type=int, default=10, metavar="N", help="Vorgabe: 10")
     kosten.set_defaults(func=_cmd_kosten)
+
+    android = subparsers.add_parser(
+        "android", help="Android-Begleiter einrichten und seine Zahlen ansehen"
+    )
+    android.add_argument("--tag", default="heute", metavar="TAG", help="Vorgabe: heute")
+    android.add_argument(
+        "--token-neu",
+        action="store_true",
+        dest="token_neu",
+        help="neues Geheimnis erzeugen und in die Konfiguration schreiben",
+    )
+    android.add_argument(
+        "--token-zeigen",
+        action="store_true",
+        dest="token_zeigen",
+        help="Token im Klartext ausgeben (zum Abtippen am Handy)",
+    )
+    android.set_defaults(func=_cmd_android)
 
     dashboard = subparsers.add_parser("dashboard", help="lokale Weboberfläche starten")
     dashboard.add_argument("--host", metavar="ADRESSE", help="Vorgabe: 127.0.0.1")
@@ -860,6 +886,128 @@ def _cmd_kosten(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _cmd_android(args: argparse.Namespace, config: Config) -> int:
+    if args.token_neu:
+        neu = android_sync.generate_token()
+        ziel = config.source or default_config_path()
+        try:
+            geschrieben = _token_schreiben(ziel, neu)
+        except FileNotFoundError:
+            print(
+                f"Es gibt noch keine Konfigurationsdatei ({ziel}).\n"
+                "Erst anlegen mit: fokusradar config --anlegen",
+                file=sys.stderr,
+            )
+            return 2
+        print(f"Neues Token: {neu}")
+        print(f"Eingetragen in: {geschrieben}")
+        if not config.android.enabled:
+            print(
+                "Der Sync ist noch abgeschaltet — in der Konfiguration "
+                "[android] aktiv = true setzen."
+            )
+        print("Dasselbe Token in der App auf dem Handy hinterlegen.")
+        return 0
+
+    tag = timeutil.parse_day(args.tag)
+    with _open_database(config) as database:
+        geraete = database.android_devices()
+        eintraege = database.android_usage(day=tag)
+        gesamt = database.android_day_seconds(tag)
+
+    print(f"Sync:     {'an' if config.android.enabled else 'aus ([android] aktiv = false)'}")
+    if config.android.token:
+        sichtbar = (
+            config.android.token
+            if args.token_zeigen
+            else "gesetzt (" + "•" * 8 + config.android.token[-4:] + ")"
+        )
+    else:
+        sichtbar = "nicht gesetzt — erzeugen mit: fokusradar android --token-neu"
+    print(f"Token:    {sichtbar}")
+    print(f"Endpunkt: {_sync_adresse(config)}")
+    print(
+        "Damit das Handy den Rechner erreicht, muss das Dashboard im Heimnetz "
+        "lauschen:\n    fokusradar dashboard --host 0.0.0.0"
+    )
+
+    print("\nGeräte:")
+    if not geraete:
+        print("  noch keins — die App auf dem Handy hat bisher nichts geschickt.")
+    for name, synced_at, letzter_tag in geraete:
+        zeitpunkt = timeutil.to_local(synced_at).strftime("%d.%m.%Y %H:%M")
+        print(f"  {name:<20} letzter Sync {zeitpunkt}   Daten bis {letzter_tag.isoformat()}")
+
+    print(f"\nHandy-Nutzung am {tag.isoformat()}: {timeutil.format_duration(gesamt)}")
+    if not eintraege:
+        print("  keine Daten für diesen Tag.")
+        return 0
+    for eintrag in eintraege[:15]:
+        name = eintrag.app_label or eintrag.package_name
+        print(
+            f"  {_shorten(name, 24):<24} {_shorten(eintrag.category or '-', 14):<14} "
+            f"{timeutil.format_duration(eintrag.seconds):>10}   {eintrag.opens} Aufrufe"
+        )
+    if len(eintraege) > 15:
+        print(f"  … und {len(eintraege) - 15} weitere Apps")
+    return 0
+
+
+def _sync_adresse(config: Config) -> str:
+    """Adresse des Sync-Endpunkts, möglichst mit der Adresse im Heimnetz."""
+    host = config.dashboard.host
+    if host in {"127.0.0.1", "0.0.0.0", "localhost", "::"}:
+        host = _lokale_adresse() or host
+    return f"http://{host}:{config.dashboard.port}/api/android/nutzung"
+
+
+def _lokale_adresse() -> str | None:
+    """Eigene Adresse im Heimnetz ermitteln (ohne Paket zu verschicken)."""
+    import socket
+
+    versuch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Verbinden ohne Datenverkehr: das Betriebssystem wählt dabei die
+        # Netzwerkkarte aus, über die es hinausginge.
+        versuch.connect(("10.255.255.255", 1))
+        return str(versuch.getsockname()[0])
+    except OSError:  # pragma: no cover - hängt am Netzwerk
+        return None
+    finally:
+        versuch.close()
+
+
+def _token_schreiben(path: Path, token: str) -> Path:
+    """Token in den Abschnitt ``[android]`` der Konfigurationsdatei eintragen."""
+    path = Path(path).expanduser()
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    zeilen = path.read_text(encoding="utf-8").splitlines()
+
+    im_abschnitt = False
+    gesetzt = False
+    kopfzeile: int | None = None
+    ergebnis: list[str] = []
+    for zeile in zeilen:
+        gestutzt = zeile.strip()
+        if gestutzt.startswith("[") and gestutzt.endswith("]"):
+            im_abschnitt = gestutzt == "[android]"
+            if im_abschnitt:
+                kopfzeile = len(ergebnis)
+        elif im_abschnitt and not gesetzt and gestutzt.startswith("token"):
+            zeile = f'token = "{token}"'
+            gesetzt = True
+        ergebnis.append(zeile)
+
+    if not gesetzt and kopfzeile is not None:
+        # Abschnitt da, aber ohne token-Zeile — direkt hinter die Überschrift.
+        ergebnis.insert(kopfzeile + 1, f'token = "{token}"')
+    elif not gesetzt:
+        ergebnis += ["", "[android]", "aktiv = false", f'token = "{token}"']
+    path.write_text("\n".join(ergebnis) + "\n", encoding="utf-8")
+    return path
+
+
 def _cmd_dashboard(args: argparse.Namespace, config: Config) -> int:
     try:
         run_dashboard(
@@ -916,6 +1064,10 @@ def _cmd_config(args: argparse.Namespace, config: Config) -> int:
         print(f"  Wochenrückblick  {config.cloud.weekly_on or '—'}")
         print(f"  OCR mitsenden    {config.cloud.send_ocr}")
     print(f"API-Schlüssel      {config.env_path}")
+    handy = "an" if config.android.enabled else "aus"
+    if config.android.enabled and not config.android.token:
+        handy = "an, aber ohne Token (fokusradar android --token-neu)"
+    print(f"Handy-Sync         {handy}")
     print(f"Dashboard          http://{config.dashboard.host}:{config.dashboard.port}/")
     if config.source is None:
         print("\nMit 'fokusradar config --anlegen' eine Konfigurationsdatei erzeugen.")

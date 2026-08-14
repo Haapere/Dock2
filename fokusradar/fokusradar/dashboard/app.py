@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fokusradar import __version__, timeutil
+from fokusradar.android import sync as android_sync
 from fokusradar.config import Config
 from fokusradar.processing.analysis import DayAnalysis, analyze_day, last_days, store_analysis
 from fokusradar.processing.categories import Categorizer
@@ -28,7 +29,7 @@ WEEK_LENGTH = 7
 # Endpunkte über die Modul-Namen auf — ein Import innerhalb der Funktion würde
 # ``Request`` fälschlich zu einem Query-Parameter machen.
 try:  # pragma: no cover - hängt an der Installation
-    from fastapi import FastAPI, Form, Request
+    from fastapi import FastAPI, Form, HTTPException, Request
     from fastapi.responses import HTMLResponse, RedirectResponse
     from fastapi.templating import Jinja2Templates
 
@@ -105,6 +106,44 @@ def day_context(
         "sessions": sessions,
         "zeitstrahl": timeline_segments(database, categorizer, day),
         "vorschlaege": database.suggestions(day=day),
+        "handy": phone_context(database, categorizer, day),
+    }
+
+
+def phone_context(
+    database: Database, categorizer: Categorizer, day: date
+) -> dict[str, Any]:
+    """Zahlen des Android-Begleiters für einen Tag (Phase 5).
+
+    Leer, solange nie ein Handy synchronisiert hat — die Ansicht blendet den
+    Abschnitt dann aus.
+    """
+    eintraege = database.android_usage(day=day)
+    gesamt = sum(eintrag.seconds for eintrag in eintraege)
+    return {
+        "hat_daten": bool(eintraege),
+        "gesamt_sekunden": gesamt,
+        "dauer": timeutil.format_duration(gesamt),
+        "apps": [
+            {
+                "name": eintrag.app_label or eintrag.package_name,
+                "paket": eintrag.package_name,
+                "kategorie": eintrag.category or "ohne Kategorie",
+                "art": categorizer.kind_of(eintrag.category),
+                "dauer": timeutil.format_duration(eintrag.seconds),
+                "oeffnungen": eintrag.opens,
+                "anteil": _percent(eintrag.seconds, gesamt),
+            }
+            for eintrag in eintraege[:12]
+        ],
+        "geraete": [
+            {
+                "name": name,
+                "sync": timeutil.to_local(synced_at).strftime("%d.%m.%Y %H:%M"),
+                "letzter_tag": letzter_tag.isoformat(),
+            }
+            for name, synced_at, letzter_tag in database.android_devices()
+        ],
     }
 
 
@@ -360,6 +399,54 @@ def create_app(config: Config, categorizer: Categorizer | None = None):
     def api_tag(datum: str):
         with _database() as database:
             return day_json(database, rules, config, _tag(datum))
+
+    # -- Android-Begleiter (Phase 5) ----------------------------------------
+
+    def _android_pruefen(request: Request) -> None:
+        """Zugang prüfen. Abgeschaltet heißt: den Endpunkt gibt es nicht."""
+        if not config.android.enabled:
+            raise HTTPException(status_code=404, detail="Not Found")
+        if not config.android.token:
+            raise HTTPException(
+                status_code=503,
+                detail="Kein Token hinterlegt — erzeugen mit: fokusradar android --token-neu",
+            )
+        vorgelegt = android_sync.token_from_header(request.headers.get("authorization"))
+        if not android_sync.check_token(config.android.token, vorgelegt):
+            raise HTTPException(status_code=401, detail="Token stimmt nicht")
+
+    @app.get("/api/android/status")
+    def api_android_status(request: Request):
+        """Verbindungstest für die App auf dem Handy."""
+        _android_pruefen(request)
+        with _database() as database:
+            geraete = database.android_devices()
+        return {
+            "status": "ok",
+            "version": __version__,
+            "heute": timeutil.parse_day("heute").isoformat(),
+            "geraete": [
+                {"name": name, "letzter_sync": timeutil.isoformat(synced_at)}
+                for name, synced_at, _letzter_tag in geraete
+            ],
+        }
+
+    @app.post("/api/android/nutzung")
+    async def api_android_nutzung(request: Request):
+        """Nutzungszahlen vom Handy entgegennehmen."""
+        _android_pruefen(request)
+        try:
+            rohdaten = await request.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400, detail=f"Der Rumpf ist kein gültiges JSON: {exc}"
+            ) from exc
+        try:
+            anfrage = android_sync.parse_payload(rohdaten)
+        except android_sync.SyncError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        with _database() as database:
+            return android_sync.apply_sync(database, anfrage, categorizer=rules)
 
     return app
 

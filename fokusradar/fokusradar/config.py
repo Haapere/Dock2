@@ -134,6 +134,13 @@ ocr_mitsenden = false
 # Eigene Preise je Million Token (überschreibt die eingebaute Tabelle)
 preis_input = 0
 preis_output = 0
+
+[android]
+# Sync des Android-Begleiters. Aus heißt: der Endpunkt antwortet mit 404.
+aktiv = false
+# Gemeinsames Geheimnis für das Handy. Neu erzeugen mit
+#   fokusradar android --token-neu
+token = ""
 """
 
 
@@ -189,6 +196,19 @@ class StorageConfig:
 
     encrypted: bool = False
     key_file: Path | None = None
+
+
+@dataclass(frozen=True)
+class AndroidConfig:
+    """Sync mit dem Android-Begleiter (Phase 5)."""
+
+    enabled: bool = False
+    token: str = ""
+
+    @property
+    def ready(self) -> bool:
+        """Kann das Handy synchronisieren?"""
+        return self.enabled and bool(self.token.strip())
 
 
 @dataclass(frozen=True)
@@ -250,6 +270,7 @@ class Config:
     screenshots: ScreenshotConfig = field(default_factory=ScreenshotConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     cloud: CloudConfig = field(default_factory=CloudConfig)
+    android: AndroidConfig = field(default_factory=AndroidConfig)
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     database_path: Path = field(default_factory=lambda: default_database_path())
     source: Path | None = None
@@ -502,6 +523,16 @@ def load_config(path: Path | None = None) -> Config:
         ),
     )
 
+    android_section = raw.get("android", {})
+    if not isinstance(android_section, dict):
+        raise ConfigError("Abschnitt [android] muss eine Tabelle sein")
+    token = android_section.get("token", "")
+    if not isinstance(token, str):
+        raise ConfigError("'token' muss ein Text sein")
+    android = AndroidConfig(
+        enabled=_boolean(android_section, "aktiv", False), token=token.strip()
+    )
+
     cloud_section = raw.get("cloud", {})
     if not isinstance(cloud_section, dict):
         raise ConfigError("Abschnitt [cloud] muss eine Tabelle sein")
@@ -556,6 +587,7 @@ def load_config(path: Path | None = None) -> Config:
         screenshots=screenshots,
         storage=storage,
         cloud=cloud,
+        android=android,
         dashboard=dashboard,
         database_path=database_path,
         source=config_path,

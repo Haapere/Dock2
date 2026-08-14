@@ -103,6 +103,26 @@ class ApiUsage:
 
 
 @dataclass(frozen=True)
+class AndroidUsage:
+    """App-Nutzung eines Tages auf dem Handy."""
+
+    id: int
+    date: date
+    device: str
+    package_name: str
+    app_label: str | None
+    seconds: int
+    opens: int
+    category: str | None
+    synced_at: datetime
+
+    @property
+    def label(self) -> str:
+        """Lesbarer Name, notfalls der Paketname."""
+        return self.app_label or self.package_name
+
+
+@dataclass(frozen=True)
 class AppTotal:
     """Aufsummierte Nutzung eines Programms in einem Zeitraum."""
 
@@ -377,6 +397,7 @@ class Database:
             "suggestions",
             "exclusion_list",
             "api_usage",
+            "android_usage",
         ]
         return {
             table: int(
@@ -725,6 +746,116 @@ class Database:
             cache_write_tokens=row["cache_write_tokens"],
             cost_usd=row["cost_usd"],
         )
+
+    # -- Android-Begleiter (Phase 5) ----------------------------------------
+
+    def record_android_usage(
+        self,
+        day: date,
+        device: str,
+        entries: list[dict[str, object]],
+        *,
+        synced_at: datetime,
+        categorizer=None,
+    ) -> int:
+        """App-Nutzung eines Handy-Tages speichern (ersetzt vorhandene Zeilen).
+
+        Ein erneuter Sync desselben Tages überschreibt die alten Werte — das
+        Handy schickt immer den Stand des ganzen Tages, nicht die Differenz.
+        """
+        gespeichert = 0
+        for eintrag in entries:
+            paket = str(eintrag.get("package") or "").strip()
+            if not paket:
+                continue
+            label = eintrag.get("label")
+            kategorie = (
+                categorizer.categorize(paket, str(label) if label else None)
+                if categorizer is not None
+                else None
+            )
+            self.connection.execute(
+                """
+                INSERT INTO android_usage
+                       (date, device, package_name, app_label, seconds, opens,
+                        category, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(date, device, package_name) DO UPDATE SET
+                       app_label = excluded.app_label,
+                       seconds   = excluded.seconds,
+                       opens     = excluded.opens,
+                       category  = excluded.category,
+                       synced_at = excluded.synced_at
+                """,
+                (
+                    day.isoformat(),
+                    device,
+                    paket,
+                    str(label) if label else None,
+                    max(0, int(eintrag.get("seconds") or 0)),
+                    max(0, int(eintrag.get("opens") or 0)),
+                    kategorie,
+                    timeutil.isoformat(synced_at),
+                ),
+            )
+            gespeichert += 1
+        return gespeichert
+
+    def android_usage(
+        self, *, day: date | None = None, device: str | None = None, limit: int | None = None
+    ) -> list[AndroidUsage]:
+        """App-Nutzung des Handys, längste zuerst."""
+        query = "SELECT * FROM android_usage"
+        bedingungen: list[str] = []
+        params: list[object] = []
+        if day is not None:
+            bedingungen.append("date = ?")
+            params.append(day.isoformat())
+        if device is not None:
+            bedingungen.append("device = ?")
+            params.append(device)
+        if bedingungen:
+            query += " WHERE " + " AND ".join(bedingungen)
+        query += " ORDER BY date DESC, seconds DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        return [
+            AndroidUsage(
+                id=row["id"],
+                date=date.fromisoformat(row["date"]),
+                device=row["device"],
+                package_name=row["package_name"],
+                app_label=row["app_label"],
+                seconds=row["seconds"],
+                opens=row["opens"],
+                category=row["category"],
+                synced_at=timeutil.parse(row["synced_at"]),
+            )
+            for row in self.connection.execute(query, params)
+        ]
+
+    def android_devices(self) -> list[tuple[str, datetime, date]]:
+        """Bekannte Geräte mit letztem Sync und letztem erfassten Tag."""
+        return [
+            (
+                row["device"],
+                timeutil.parse(row["synced_at"]),
+                date.fromisoformat(row["letzter_tag"]),
+            )
+            for row in self.connection.execute(
+                "SELECT device, MAX(synced_at) AS synced_at, MAX(date) AS letzter_tag"
+                " FROM android_usage GROUP BY device ORDER BY synced_at DESC"
+            )
+        ]
+
+    def android_day_seconds(self, day: date) -> int:
+        """Gesamte Handy-Nutzung eines Tages in Sekunden."""
+        row = self.connection.execute(
+            "SELECT COALESCE(SUM(seconds), 0) AS s FROM android_usage WHERE date = ?",
+            (day.isoformat(),),
+        ).fetchone()
+        return int(row["s"])
 
     def tracked_days(self) -> list[date]:
         """Alle lokalen Kalendertage mit Daten, neueste zuerst."""

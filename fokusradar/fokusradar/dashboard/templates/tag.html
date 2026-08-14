@@ -125,4 +125,34 @@
 </div>
 
 {% endif %}
+
+{% if handy.hat_daten %}
+<h2>Handy</h2>
+<div class="karte">
+  <p style="margin-top:0">
+    Bildschirmzeit am Handy: <strong>{{ handy.dauer }}</strong>
+    {% if handy.geraete %}
+    <span class="zusatz">
+      ({% for geraet in handy.geraete %}{{ geraet.name }}, zuletzt {{ geraet.sync }}{% if not loop.last %}; {% endif %}{% endfor %})
+    </span>
+    {% endif %}
+  </p>
+  <table>
+    <thead>
+      <tr><th>App</th><th>Kategorie</th><th class="zahl">Zeit</th><th class="zahl">Aufrufe</th><th style="width:25%"></th></tr>
+    </thead>
+    <tbody>
+      {% for app in handy.apps %}
+      <tr>
+        <td title="{{ app.paket }}">{{ app.name }}</td>
+        <td>{{ app.kategorie }}</td>
+        <td class="zahl">{{ app.dauer }}</td>
+        <td class="zahl">{{ app.oeffnungen }}</td>
+        <td><div class="balken {{ app.art }}" style="width:{{ '%.1f' % app.anteil }}%"></div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

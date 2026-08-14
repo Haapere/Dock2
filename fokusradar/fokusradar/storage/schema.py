@@ -3,8 +3,9 @@
 Das Schema folgt Abschnitt 6 des Bauplans. Alle Tabellen späterer Phasen
 werden bereits angelegt, damit Phase 2-4 nur noch schreiben müssen.
 
-``api_usage`` (Phase 4) kommt gegenüber dem Bauplan hinzu: ohne sie ließe sich
-das dort geforderte Kosten-Tracking nicht führen.
+``api_usage`` (Phase 4) und ``android_usage`` (Phase 5) kommen gegenüber dem
+Bauplan hinzu: ohne die eine ließe sich das dort geforderte Kosten-Tracking
+nicht führen, ohne die andere die App-Nutzung des Handys nicht ablegen.
 
 Zwei bewusste Ergänzungen gegenüber dem Bauplan bei ``window_events``:
 ``ended_at`` und ``duration_seconds``. Statt alle paar Sekunden eine Zeile zu
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS window_events (
@@ -89,6 +90,22 @@ CREATE TABLE IF NOT EXISTS api_usage (             -- ab Phase 4
 
 CREATE INDEX IF NOT EXISTS idx_api_usage_timestamp
     ON api_usage (timestamp);
+
+CREATE TABLE IF NOT EXISTS android_usage (         -- ab Phase 5
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date DATE NOT NULL,                -- lokaler Kalendertag auf dem Handy
+    device TEXT NOT NULL,              -- frei gewählter Gerätename
+    package_name TEXT NOT NULL,        -- z. B. com.android.chrome
+    app_label TEXT,                    -- lesbarer Name, falls das Handy ihn kennt
+    seconds INTEGER NOT NULL DEFAULT 0,
+    opens INTEGER NOT NULL DEFAULT 0,  -- wie oft die App in den Vordergrund kam
+    category TEXT,                     -- über categories.yaml zugeordnet
+    synced_at DATETIME NOT NULL,
+    UNIQUE (date, device, package_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_android_usage_date
+    ON android_usage (date);
 """
 
 

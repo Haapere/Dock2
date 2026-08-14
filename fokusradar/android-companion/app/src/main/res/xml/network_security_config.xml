@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Der Rechner im Heimnetz spricht http, nicht https: für eine Adresse wie
+  192.168.x.x gibt es kein Zertifikat, das ein Handy prüfen könnte. Deshalb ist
+  unverschlüsselter Verkehr erlaubt.
+
+  Das ist bewusst so und nicht so weitreichend, wie es aussieht: die App ruft
+  ausschließlich die eine Adresse auf, die in ihren Einstellungen steht, und
+  schickt sonst nichts irgendwohin. Einen Filter auf private Adressbereiche
+  kennt diese Datei leider nicht — sie vergleicht nur ganze Hostnamen.
+
+  Wer die Verbindung absichern will, stellt vor das Dashboard einen
+  Reverse-Proxy mit eigenem Zertifikat, trägt dessen Namen in den
+  Einstellungen ein und setzt hier cleartextTrafficPermitted="false".
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -38,6 +38,10 @@ DEFAULT_CATEGORIES_YAML = """\
 #
 # Geprüft wird zuerst über alle "titel"-Muster (Teiltreffer), danach über alle
 # "prozesse"-Muster (mit * und ? als Platzhaltern). Die erste Übereinstimmung gewinnt.
+#
+# Die Zahlen des Android-Begleiters laufen durch dieselben Regeln: dort steht der
+# Paketname (com.instagram.android) an der Stelle des Prozesses und der App-Name
+# an der Stelle des Fenstertitels.
 
 standard: sonstiges
 
@@ -55,6 +59,8 @@ kategorien:
       - powershell.exe
       - cmd.exe
       - windsurf.exe
+      - com.termux
+      - com.github.android
     titel:
       - stack overflow
       - github.com
@@ -85,12 +91,26 @@ kategorien:
       - thunderbird.exe
       - zoom.exe
       - webex.exe
+      - com.whatsapp
+      - org.thoughtcrime.securesms
+      - org.telegram.messenger
+      - com.microsoft.teams
+      - com.slack
+      - com.google.android.gm
 
   - name: ablenkung
     zaehlt_als: ablenkung
     prozesse:
       - steam.exe
       - discord.exe
+      - com.google.android.youtube
+      - com.instagram.android
+      - com.zhiliaoapp.musically
+      - com.reddit.frontpage
+      - com.netflix.mediaclient
+      - tv.twitch.android.app
+      - com.facebook.katana
+      - com.snapchat.android
     titel:
       - youtube
       - netflix
@@ -109,6 +129,10 @@ kategorien:
       - chrome.exe
       - msedge.exe
       - spotify.exe
+      - com.android.*
+      - com.google.android.apps.*
+      - org.mozilla.*
+      - com.spotify.music
 """
 
 

@@ -2,7 +2,7 @@
 
 Ein Aktivitäts-Monitor für den eigenen Rechner: Er erfasst im Hintergrund, **welches Programm gerade aktiv ist** und **wie viel wirklich gearbeitet wird**, speichert das ausschließlich lokal — und leitet daraus später konkrete Verbesserungsvorschläge zu Fokus und Bedienung ab.
 
-> **Stand: Phase 4 von 6.** Erfassung, Kategorisierung, lokale Auswertung, Dashboard, Ausschlussliste, Screenshots mit lokaler OCR, verschlüsselte Datenbank und die Cloud-Analyse über die Claude-API stehen. Es fehlt nur noch der Android-Begleiter (siehe [Fahrplan](#fahrplan)).
+> **Stand: Phase 5 von 6.** Erfassung, Kategorisierung, lokale Auswertung, Dashboard, Ausschlussliste, Screenshots mit lokaler OCR, verschlüsselte Datenbank, die Cloud-Analyse über die Claude-API und der Android-Begleiter stehen. Offen ist nur noch die optionale Phase 6 (siehe [Fahrplan](#fahrplan)).
 
 ## Was erfasst wird — und was nicht
 
@@ -14,6 +14,7 @@ Ein Aktivitäts-Monitor für den eigenen Rechner: Er erfasst im Hintergrund, **w
 | Sekunden seit der letzten Eingabe (Idle-Zeit) | *welche* Taste gedrückt wurde |
 | Anzahl der Eingaben pro Messpunkt (optional) | Bildschirminhalt, solange Screenshots aus sind (Vorgabe) |
 | Screenshot-Text, wenn eingeschaltet (Bild wird danach gelöscht) | — |
+| App-Nutzung des Handys in Sekunden, wenn der Begleiter eingerichtet ist | Inhalte, Benachrichtigungen oder Bildschirm des Handys |
 
 Alle Daten liegen in **einer lokalen SQLite-Datei**, auf Wunsch mit SQLCipher verschlüsselt. Ohne `[cloud] aktiv = true` gibt es keinerlei Netzwerkzugriff — keine Telemetrie, keine Ausnahmen. Das Dashboard ist ein Server auf `localhost`, der nur die eigene Datenbank liest.
 
@@ -80,6 +81,10 @@ fokusradar verschluesseln
 fokusradar cloud --zeigen
 fokusradar cloud
 fokusradar kosten
+
+# 8. Handy anbinden (Zahlen der App-Nutzung aus dem Heimnetz)
+fokusradar android --token-neu
+fokusradar android
 ```
 
 Tagesangaben verstehen `heute`, `gestern`, `-3` (vor drei Tagen) und `2026-08-13`.
@@ -293,6 +298,54 @@ Ein Tagesaufruf liegt bei etwa 1.500-3.000 Token hinein und einigen hundert hina
 
 Zwei Hinweise zu den Zahlen: Die 2 $/10 $ für Sonnet 5 sind ein **Einführungspreis bis 31.08.2026**, danach gelten 3 $/15 $ — der Bauplan rechnet noch mit dem Einführungspreis. Und die Beträge hier sind Schätzungen aus der Token-Zahl; maßgeblich ist die Abrechnung von Anthropic. Eigene Konditionen lassen sich über `preis_input`/`preis_output` hinterlegen.
 
+## Android-Begleiter
+
+Eine kleine App fürs Handy zählt, wie lange welche App im Vordergrund war, und schickt diese Zahlen im Heimnetz an das Dashboard. Damit steht die Bildschirmzeit des Handys in derselben Tagesansicht wie die des Rechners. Quelltext und Bauanleitung: [`android-companion/`](android-companion/README.md).
+
+Was das Handy verlässt: **Paketname, App-Name, Sekunden, Aufrufe** — je App und Tag. Keine Inhalte, keine Benachrichtigungen, keine Bildschirmfotos. Und nur in Richtung des einen Rechners, dessen Adresse in der App steht.
+
+### Einrichten
+
+```bash
+fokusradar android --token-neu     # Geheimnis erzeugen, landet in der config.toml
+```
+
+Danach `[android] aktiv = true` setzen und das Dashboard so starten, dass das Handy es erreicht:
+
+```bash
+fokusradar dashboard --host 0.0.0.0
+```
+
+`fokusradar android` zeigt Zustand, Endpunkt und die bekannten Geräte — und die Handy-Nutzung eines Tages:
+
+```
+Sync:     an
+Token:    gesetzt (••••b7Qe)
+Endpunkt: http://192.168.1.42:8760/api/android/nutzung
+
+Geräte:
+  Pixel-7              letzter Sync 14.08.2026 21:04   Daten bis 2026-08-14
+
+Handy-Nutzung am 2026-08-14: 2h 13min
+  Instagram                ablenkung           45min   24 Aufrufe
+  Signal                   kommunikation       18min   31 Aufrufe
+```
+
+In der App auf dem Handy dieselbe Adresse und dasselbe Token eintragen, die Berechtigung „Zugriff auf Nutzungsdaten“ erteilen — fertig.
+
+### Der Sync-Endpunkt
+
+| | |
+|---|---|
+| `POST /api/android/nutzung` | nimmt die Zahlen entgegen |
+| `GET /api/android/status` | Verbindungstest für die App |
+
+Beide verlangen `Authorization: Bearer <token>`; verglichen wird in konstanter Zeit. **Ohne `[android] aktiv = true` gibt es die Endpunkte nicht** — das Dashboard antwortet mit 404, als wäre nie einer eingebaut worden. Ein falsches Token ergibt 401, unbrauchbare Daten 400.
+
+Ein Sync schickt immer den vollen Stand der letzten Tage, keine Differenz; ein Tag wird beim Empfang komplett ersetzt. Zweimal senden verdoppelt also nichts, und ein paar Tage ohne WLAN holt der nächste Sync von allein nach.
+
+Die Pakete laufen durch dieselben Regeln wie die Programme (`categories.yaml`): der Paketname steht an der Stelle des Prozesses, der App-Name an der Stelle des Fenstertitels. Gängige Pakete sind in den eingebauten Regeln schon einsortiert.
+
 ## Konfiguration
 
 ```bash
@@ -323,6 +376,8 @@ Ohne Konfigurationsdatei gelten die Vorgabewerte — FokusRadar ist also sofort 
 | `modell` / `aufwand` | `claude-sonnet-5` / `medium` | Modell und Denk-Aufwand der Cloud-Analyse |
 | `taeglich_ab` / `woechentlich_am` | `"18:00"` / `"sonntag"` | wann die Erfassung selbst fragt |
 | `ocr_mitsenden` | `false` | OCR-Text an die Cloud mitsenden |
+| `aktiv` (Android) | `false` | Sync-Endpunkt für das Handy einschalten |
+| `token` (Android) | leer | gemeinsames Geheimnis, erzeugt von `fokusradar android --token-neu` |
 | `host` / `port` | `127.0.0.1` / 8760 | Adresse des Dashboards |
 
 Speicherorte (überschreibbar per `--config`/`--db` oder den Umgebungsvariablen `FOKUSRADAR_CONFIG`/`FOKUSRADAR_DB`):
@@ -360,7 +415,9 @@ fokusradar/
 │   ├── processing/         # Kategorien, Ausschlussliste, Fokus-/Ablenkungsanalyse
 │   ├── storage/            # SQLite-Schema, Abfragen, Verschlüsselung
 │   ├── cloud/              # Claude-API: Nutzlast, Aufruf, Kosten
+│   ├── android/            # Gegenstelle für den Sync des Handys
 │   └── dashboard/          # FastAPI-App + Jinja2-Templates
+├── android-companion/      # die App fürs Handy (Kotlin, Gradle)
 ├── config/                 # Vorlagen: config, categories.yaml, exclusions.yaml
 └── tests/
 ```
@@ -369,7 +426,7 @@ Die Erfassung steckt hinter zwei schmalen Schnittstellen (`WindowBackend`, `Idle
 
 ### Datenmodell
 
-Das Schema folgt Abschnitt 6 des Bauplans und ist vollständig in Gebrauch: `window_events` und `activity_level` von der Erfassung, `daily_summaries` und `suggestions` von der Auswertung, `screenshots_meta` von der OCR-Kette und `exclusion_list` von der Ausschlussliste. Dazu kommt `api_usage` (Phase 4) — ohne sie ließe sich das im Bauplan geforderte Kosten-Tracking nicht führen.
+Das Schema folgt Abschnitt 6 des Bauplans und ist vollständig in Gebrauch: `window_events` und `activity_level` von der Erfassung, `daily_summaries` und `suggestions` von der Auswertung, `screenshots_meta` von der OCR-Kette und `exclusion_list` von der Ausschlussliste. Dazu kommen zwei Tabellen, die der Bauplan nicht ausdrücklich nennt: `api_usage` (Phase 4) — ohne sie ließe sich das geforderte Kosten-Tracking nicht führen — und `android_usage` (Phase 5) für die Zahlen des Handys, eine Zeile je Gerät, Tag und Paket.
 
 Eine Ergänzung gibt es bei `window_events`: die Spalten `ended_at` und `duration_seconds`. FokusRadar schreibt **eine Zeile je zusammenhängender Fensternutzung** statt einer Zeile alle drei Sekunden. Das spart rund 99 % der Zeilen, macht die Fokus-Sessions aus Phase 2 zu einer einfachen Abfrage — und weil das Ende laufend fortgeschrieben wird, kostet ein Absturz höchstens ein Erfassungsintervall.
 
@@ -391,7 +448,7 @@ python -m pytest -q
 - [x] **Phase 2 — Kategorisierung & lokale Analyse:** `categories.yaml`, Ablenkungs-/Fokus-Erkennung, Tageszusammenfassung, erstes Dashboard
 - [x] **Phase 3 — Screenshots & OCR:** periodische Screenshots, lokale OCR, Ausschlussliste, Smart Pause, DB-Verschlüsselung
 - [x] **Phase 4 — Cloud-Hybrid:** Claude-API-Anbindung für die Vorschläge, Prompt-Vorlagen, Kosten-Tracking
-- [ ] **Phase 5 — Android-Begleiter:** App-Nutzungsstatistik via `UsageStatsManager`
+- [x] **Phase 5 — Android-Begleiter:** App-Nutzungsstatistik via `UsageStatsManager`, Sync ins Heimnetz
 - [ ] **Phase 6 — optional:** Android-Screen-Monitoring, Vision-Analyse einzelner Screenshots
 
 ## Hinweis
