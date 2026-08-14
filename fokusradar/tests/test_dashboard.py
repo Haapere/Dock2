@@ -156,3 +156,58 @@ def test_vorschlag_kann_weggeklickt_werden(client, config, tag):
 
     with Database(config.database_path) as database:
         assert offen[0].text not in [v.text for v in database.suggestions(day=tag)]
+
+
+# -- Ausschlussliste im Dashboard -------------------------------------------
+
+
+def test_ausschlussseite_zeigt_und_pflegt_muster(client, config):
+    from fokusradar.storage.db import Database
+
+    seite = client.get("/ausschluss")
+    assert seite.status_code == 200
+    assert "Ausschlussliste" in seite.text
+    assert "keepass" in seite.text.lower()  # aus der Startvorlage übernommen
+
+    antwort = client.post(
+        "/ausschluss/hinzufuegen",
+        data={"muster": "tresor.exe", "typ": "process"},
+        follow_redirects=True,
+    )
+    assert antwort.status_code == 200
+    assert "tresor.exe" in antwort.text
+
+    with Database.from_config(config) as database:
+        regel = [r for r in database.exclusions() if r.pattern == "tresor.exe"][0]
+
+    entfernt = client.post(f"/ausschluss/{regel.id}/entfernen", follow_redirects=True)
+    assert "Muster entfernt" in entfernt.text
+    with Database.from_config(config) as database:
+        assert not database.exclusions().excludes("tresor.exe")
+
+
+def test_leeres_muster_wird_abgewiesen(client, config):
+    from fokusradar.storage.db import Database
+
+    with Database.from_config(config) as database:
+        vorher = len(database.exclusions())
+
+    antwort = client.post(
+        "/ausschluss/hinzufuegen", data={"muster": "   ", "typ": "process"},
+        follow_redirects=True,
+    )
+    assert antwort.status_code == 200
+    with Database.from_config(config) as database:
+        assert len(database.exclusions()) == vorher
+
+
+def test_ungueltiger_mustertyp_bleibt_folgenlos(client, config):
+    from fokusradar.storage.db import Database
+
+    antwort = client.post(
+        "/ausschluss/hinzufuegen", data={"muster": "x.exe", "typ": "quatsch"},
+        follow_redirects=True,
+    )
+    assert antwort.status_code == 200
+    with Database.from_config(config) as database:
+        assert not database.exclusions().excludes("x.exe")

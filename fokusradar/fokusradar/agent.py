@@ -1,4 +1,4 @@
-"""Der Tracker: Erfassungsschleife von Phase 1.
+"""Der Tracker: die Erfassungsschleife.
 
 Ablauf je Durchlauf (Standard: alle 3 Sekunden):
 
@@ -6,11 +6,16 @@ Ablauf je Durchlauf (Standard: alle 3 Sekunden):
    die Zeit als Pause: die laufende Fensternutzung wird **rückwirkend** auf den
    Zeitpunkt der letzten Eingabe beendet, damit Pausen nicht der zuletzt
    genutzten Anwendung zugerechnet werden.
-2. Sonst das aktive Fenster abfragen. Ist es dasselbe wie zuvor, wird nur das
+2. Sonst das aktive Fenster abfragen und prüfen, ob es überhaupt erfasst werden
+   darf: Programme der **Ausschlussliste** und die **Smart Pause** bei
+   Videocalls stoppen die Aufzeichnung, bevor irgendetwas gespeichert wird.
+3. Ist die Erfassung erlaubt und das Fenster dasselbe wie zuvor, wird nur das
    Ende fortgeschrieben; sonst wird die alte Nutzung beendet und eine neue
    begonnen.
-3. In größerem Abstand (Vorgabe 60 Sekunden) einen Messpunkt des
-   Aktivitätslevels schreiben (Idle-Sekunden, Anzahl Eingabe-Ereignisse).
+4. In größerem Abstand (Vorgabe 60 Sekunden) einen Messpunkt des
+   Aktivitätslevels schreiben (Idle-Sekunden, Anzahl Eingabe-Ereignisse) und
+   — falls eingeschaltet — alle paar Minuten einen Screenshot mit lokaler
+   Texterkennung.
 
 Die Schleife ist über ``tick(now)`` schrittweise testbar; ``run()`` ist nur die
 Hülle mit Schlaf und Abbruchbedingung.
@@ -28,11 +33,20 @@ from fokusradar import timeutil
 from fokusradar.capture import (
     create_idle_backend,
     create_input_counter,
+    create_ocr_backend,
+    create_screenshot_backend,
     create_window_backend,
 )
 from fokusradar.capture.base import IdleBackend, WindowBackend, WindowInfo
+from fokusradar.capture.screenshots import (
+    OcrBackend,
+    ScreenshotBackend,
+    clean_ocr_text,
+    screenshot_filename,
+)
 from fokusradar.config import Config
 from fokusradar.processing.categories import Categorizer
+from fokusradar.processing.exclusions import ExclusionList
 from fokusradar.storage.db import Database
 
 
@@ -44,6 +58,9 @@ class TrackerStats:
     window_events: int = 0
     activity_samples: int = 0
     idle_periods: int = 0
+    excluded: int = 0
+    smart_pauses: int = 0
+    screenshots: int = 0
 
 
 @dataclass
@@ -66,6 +83,9 @@ class Tracker:
         idle_backend: IdleBackend | None = None,
         input_counter: object | None = None,
         categorizer: Categorizer | None = None,
+        exclusions: ExclusionList | None = None,
+        screenshot_backend: ScreenshotBackend | None = None,
+        ocr_backend: OcrBackend | None = None,
         on_event: Callable[[str], None] | None = None,
     ) -> None:
         self.db = database
@@ -76,12 +96,25 @@ class Tracker:
             config.capture.count_input_events
         )
         self.categorizer = categorizer or Categorizer.load(config.categories_path)
+        self.exclusions = exclusions if exclusions is not None else database.exclusions()
+        self.screenshot_backend = screenshot_backend or create_screenshot_backend(
+            config.screenshots.enabled
+        )
+        self.ocr_backend = ocr_backend or create_ocr_backend(
+            config.screenshots.enabled and config.screenshots.ocr,
+            config.screenshots.ocr_languages,
+        )
         self.stats = TrackerStats()
         self._on_event = on_event
         self._session: _CurrentSession | None = None
         self._idle_since: datetime | None = None
         self._last_activity_sample: datetime | None = None
+        self._last_screenshot: datetime | None = None
         self._counting_inputs = False
+        self._blocked_reason: str | None = None
+        self._pause_processes = {
+            name.casefold() for name in config.capture.pause_processes
+        }
 
     # -- Lebenszyklus -------------------------------------------------------
 
@@ -118,6 +151,7 @@ class Tracker:
             self._handle_active(moment)
 
         self._maybe_sample_activity(moment, idle_seconds)
+        self._maybe_take_screenshot(moment)
 
     def _handle_idle(self, now: datetime, idle_seconds: float) -> None:
         """Pause: laufende Nutzung rückwirkend beim letzten Input beenden."""
@@ -136,7 +170,20 @@ class Tracker:
         if info is None:
             # Kein Fenster ermittelbar (z. B. Sperrbildschirm): Sitzung beenden.
             self._close_session(now)
+            self._blocked_reason = None
             return
+
+        blocked = self._blocked_by(info)
+        if blocked is not None:
+            # Nichts speichern: weder Prozessname noch Titel noch Screenshot.
+            self._close_session(now)
+            if self._blocked_reason != blocked:
+                self._blocked_reason = blocked
+                self._notify(f"Erfassung ausgesetzt — {blocked}")
+            return
+        if self._blocked_reason is not None:
+            self._blocked_reason = None
+            self._notify("Erfassung läuft wieder")
 
         if not self.config.capture.store_window_titles:
             info = WindowInfo(process_name=info.process_name, window_title=None)
@@ -181,6 +228,70 @@ class Tracker:
         input_events = self.input_counter.take() if self._counting_inputs else None
         self.db.record_activity(now, idle_seconds, input_events)
         self.stats.activity_samples += 1
+
+    def _blocked_by(self, info: WindowInfo) -> str | None:
+        """Grund, warum dieses Fenster nicht erfasst werden darf — oder ``None``.
+
+        Geprüft wird ausschließlich im Arbeitsspeicher; nichts davon wird
+        gespeichert.
+        """
+        if info.process_name.casefold() in self._pause_processes:
+            self.stats.smart_pauses += 1
+            return f"Smart Pause ({info.process_name})"
+        rule = self.exclusions.matching_rule(info.process_name, info.window_title)
+        if rule is not None:
+            self.stats.excluded += 1
+            return f"Ausschlussliste ({rule.label}-Muster {rule.pattern!r})"
+        return None
+
+    @property
+    def blocked_reason(self) -> str | None:
+        """Warum die Erfassung gerade ausgesetzt ist (für Status und Tray)."""
+        return self._blocked_reason
+
+    def _maybe_take_screenshot(self, now: datetime) -> None:
+        """Aufnahme samt Texterkennung, wenn das Intervall abgelaufen ist."""
+        settings = self.config.screenshots
+        if not settings.enabled or not self.screenshot_backend.available():
+            return
+        if self._blocked_reason is not None or self._idle_since is not None:
+            return  # während Ausschluss, Smart Pause und Pausen wird nichts aufgenommen
+        if self._session is None:
+            return  # nichts Erfassbares im Vordergrund
+        last = self._last_screenshot
+        if last is not None and (now - last).total_seconds() < settings.interval_seconds:
+            return
+
+        self._last_screenshot = now
+        ziel = self.config.screenshot_dir / screenshot_filename(now)
+        bild = self.screenshot_backend.capture(ziel)
+        if bild is None:
+            self._notify(
+                "Screenshot fehlgeschlagen — "
+                f"{self.screenshot_backend.unavailable_reason() or 'unbekannter Grund'}"
+            )
+            return
+
+        text = clean_ocr_text(self.ocr_backend.text(bild), settings.text_max_length)
+        geloescht = None
+        pfad: str | None = str(bild)
+        if settings.delete_image:
+            try:
+                bild.unlink()
+                geloescht = now
+                pfad = None
+            except OSError as exc:  # pragma: no cover - Datei ist schon weg o. Ä.
+                self._notify(f"Screenshot ließ sich nicht löschen: {exc}")
+
+        self.db.record_screenshot(
+            now, ocr_text=text, screenshot_path=pfad, deleted_at=geloescht
+        )
+        self.stats.screenshots += 1
+        self._notify(
+            "Screenshot: "
+            + (f"{len(text)} Zeichen Text erkannt" if text else "kein Text erkannt")
+            + (", Bild gelöscht" if geloescht else "")
+        )
 
     # -- Dauerbetrieb -------------------------------------------------------
 
@@ -231,6 +342,8 @@ class Tracker:
             ("Fenster-Erfassung", self.window_backend),
             ("Idle-Erkennung", self.idle_backend),
             ("Eingabe-Zählung", self.input_counter),
+            ("Screenshots", self.screenshot_backend),
+            ("Texterkennung", self.ocr_backend),
         ):
             if backend.available():  # type: ignore[union-attr]
                 report.append((label, f"aktiv ({backend.name})"))  # type: ignore[union-attr]

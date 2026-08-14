@@ -7,6 +7,9 @@
     fokusradar aktivitaet # Messpunkte des Aktivitätslevels
     fokusradar auswerten  # Tagesauswertung mit Fokus, Ablenkung, Vorschlägen
     fokusradar kategorien # Regeln anzeigen und ausprobieren
+    fokusradar ausschluss # Ausschlussliste pflegen (was nie erfasst wird)
+    fokusradar screenshots      # erkannte Texte der Aufnahmen ansehen
+    fokusradar verschluesseln   # Datenbank auf SQLCipher umstellen
     fokusradar dashboard  # lokale Weboberfläche starten
     fokusradar config     # Konfiguration anzeigen oder anlegen
 """
@@ -30,7 +33,14 @@ from fokusradar.processing.categories import (
     CategoryError,
     write_default_categories,
 )
-from fokusradar.storage.db import Database
+from fokusradar.processing.exclusions import (
+    PATTERN_TYPES,
+    ExclusionError,
+    ExclusionList,
+    write_default_exclusions,
+)
+from fokusradar.storage import crypto
+from fokusradar.storage.db import Database, DatabaseLocked
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -123,6 +133,39 @@ def _build_parser() -> argparse.ArgumentParser:
     kategorien.add_argument("--titel", metavar="TITEL", help="Fenstertitel zum Test")
     kategorien.set_defaults(func=_cmd_kategorien)
 
+    ausschluss = subparsers.add_parser(
+        "ausschluss", help="Ausschlussliste anzeigen und pflegen"
+    )
+    ausschluss_teil = ausschluss.add_subparsers(dest="aktion")
+    ausschluss.set_defaults(func=_cmd_ausschluss, aktion=None)
+    ausschluss_teil.add_parser("liste", help="Muster anzeigen (Vorgabe)")
+    hinzufuegen = ausschluss_teil.add_parser("hinzufuegen", help="Muster aufnehmen")
+    hinzufuegen.add_argument("--prozess", metavar="MUSTER", help='z. B. "keepass*.exe"')
+    hinzufuegen.add_argument("--titel", metavar="MUSTER", help='z. B. "online-banking"')
+    entfernen = ausschluss_teil.add_parser("entfernen", help="Muster löschen")
+    entfernen.add_argument("id", type=int, help="Nummer aus 'ausschluss liste'")
+    pruefen = ausschluss_teil.add_parser("pruefen", help="Fenster gegen die Liste prüfen")
+    pruefen.add_argument("prozess", help="Prozessname")
+    pruefen.add_argument("--titel", metavar="TITEL", help="Fenstertitel")
+
+    screenshots = subparsers.add_parser(
+        "screenshots", help="Aufnahmen und erkannte Texte anzeigen"
+    )
+    screenshots.add_argument("--tag", metavar="TAG", help="heute, gestern, -3 oder JJJJ-MM-TT")
+    screenshots.add_argument("--anzahl", type=int, default=10, metavar="N", help="Vorgabe: 10")
+    screenshots.add_argument(
+        "--text", action="store_true", help="den erkannten Text vollständig ausgeben"
+    )
+    screenshots.set_defaults(func=_cmd_screenshots)
+
+    verschluesseln = subparsers.add_parser(
+        "verschluesseln", help="vorhandene Datenbank auf SQLCipher umstellen"
+    )
+    verschluesseln.add_argument(
+        "--ja", action="store_true", help="ohne Rückfrage durchführen"
+    )
+    verschluesseln.set_defaults(func=_cmd_verschluesseln)
+
     dashboard = subparsers.add_parser("dashboard", help="lokale Weboberfläche starten")
     dashboard.add_argument("--host", metavar="ADRESSE", help="Vorgabe: 127.0.0.1")
     dashboard.add_argument("--port", type=int, metavar="PORT", help="Vorgabe: 8760")
@@ -140,6 +183,21 @@ def _build_parser() -> argparse.ArgumentParser:
     config_cmd.set_defaults(func=_cmd_config)
 
     return parser
+
+
+def _open_database(config: Config) -> Database:
+    """Datenbank öffnen und beim ersten Mal die Ausschluss-Vorlage übernehmen."""
+    database = Database.from_config(config)
+    database.connect()
+    uebernommen = database.seed_exclusions(
+        ExclusionList.load_template(config.exclusions_path)
+    )
+    if uebernommen:
+        print(
+            f"Ausschlussliste angelegt: {uebernommen} Muster aus der Vorlage übernommen.",
+            file=sys.stderr,
+        )
+    return database
 
 
 def _resolve_config(args: argparse.Namespace) -> Config:
@@ -185,7 +243,7 @@ def _cmd_track(args: argparse.Namespace, config: Config) -> int:
         except (ValueError, OSError):  # pragma: no cover - z. B. in Threads
             pass
 
-    with Database(config.database_path) as database:
+    with _open_database(config) as database:
         tracker = Tracker(
             database,
             config,
@@ -218,8 +276,9 @@ def _cmd_status(args: argparse.Namespace, config: Config) -> int:
     print(f"Konfiguration: {config.source or 'Vorgabewerte (keine Datei gefunden)'}")
     print(f"Datenbank:     {config.database_path}", end="")
     if config.database_path.exists():
-        size_kb = config.database_path.stat().st_size / 1024
-        print(f"  ({size_kb:,.0f} KB)".replace(",", "."))
+        size_kb = f"{config.database_path.stat().st_size / 1024:,.0f}".replace(",", ".")
+        zustand = "verschlüsselt" if crypto.is_encrypted(config.database_path) else "Klartext"
+        print(f"  ({size_kb} KB, {zustand})")
     else:
         print("  (noch nicht angelegt)")
 
@@ -230,8 +289,17 @@ def _cmd_status(args: argparse.Namespace, config: Config) -> int:
     print(
         f"  Fenstertitel       {'werden gespeichert' if config.capture.store_window_titles else 'werden nicht gespeichert'}"
     )
+    print(f"  Smart Pause bei    {', '.join(config.capture.pause_processes) or '—'}")
+    if config.screenshots.enabled:
+        print(
+            f"  Screenshots        alle {config.screenshots.interval_seconds:g} s"
+            f", OCR {'an' if config.screenshots.ocr else 'aus'}"
+            f", Bild {'wird gelöscht' if config.screenshots.delete_image else 'bleibt liegen'}"
+        )
+    else:
+        print("  Screenshots        aus")
 
-    with Database(config.database_path) as database:
+    with _open_database(config) as database:
         tracker = Tracker(database, config)
         print("\nBackends:")
         for label, state in tracker.backend_report():
@@ -240,6 +308,12 @@ def _cmd_status(args: argparse.Namespace, config: Config) -> int:
         print("\nDatenbestand:")
         for table, count in database.table_counts().items():
             print(f"  {table:<18} {count:>8} Zeilen")
+
+        liste = database.exclusions()
+        print(
+            f"\nAusschlussliste: {_plural(len(liste), 'Muster', 'Muster')}"
+            + (" — 'fokusradar ausschluss liste' zeigt sie" if len(liste) else "")
+        )
 
         current = database.current_window_event()
         if current is not None:
@@ -261,7 +335,7 @@ def _cmd_status(args: argparse.Namespace, config: Config) -> int:
 
 def _cmd_log(args: argparse.Namespace, config: Config) -> int:
     day = _parse_day(args.tag)
-    with Database(config.database_path) as database:
+    with _open_database(config) as database:
         events = database.window_events(day=day, limit=args.anzahl)
     if not events:
         print("Keine Fensternutzungen gefunden.")
@@ -284,7 +358,7 @@ def _cmd_log(args: argparse.Namespace, config: Config) -> int:
 
 def _cmd_zeiten(args: argparse.Namespace, config: Config) -> int:
     day = _parse_day(args.tag) or timeutil.parse_day("heute")
-    with Database(config.database_path) as database:
+    with _open_database(config) as database:
         totals = database.app_totals(day, limit=args.anzahl)
         all_totals = database.app_totals(day)
     if not totals:
@@ -311,7 +385,7 @@ def _cmd_zeiten(args: argparse.Namespace, config: Config) -> int:
 
 def _cmd_aktivitaet(args: argparse.Namespace, config: Config) -> int:
     day = _parse_day(args.tag) or timeutil.parse_day("heute")
-    with Database(config.database_path) as database:
+    with _open_database(config) as database:
         samples = database.activity_samples(day=day, limit=args.anzahl)
     if not samples:
         print(f"Für {day.isoformat()} liegen keine Messpunkte vor.")
@@ -337,7 +411,7 @@ def _cmd_auswerten(args: argparse.Namespace, config: Config) -> int:
     day = _parse_day(args.tag) or timeutil.parse_day("heute")
     categorizer = Categorizer.load(config.categories_path)
 
-    with Database(config.database_path) as database:
+    with _open_database(config) as database:
         analysis = analyze_day(database, categorizer, day, config.analysis)
         if not args.nicht_speichern:
             store_analysis(database, analysis)
@@ -448,6 +522,134 @@ def _cmd_kategorien(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _cmd_ausschluss(args: argparse.Namespace, config: Config) -> int:
+    aktion = getattr(args, "aktion", None) or "liste"
+
+    with _open_database(config) as database:
+        if aktion == "hinzufuegen":
+            eintraege = [
+                (muster, typ)
+                for muster, typ in ((args.prozess, "process"), (args.titel, "title"))
+                if muster
+            ]
+            if not eintraege:
+                print(
+                    "Bitte --prozess oder --titel angeben, z. B.\n"
+                    '  fokusradar ausschluss hinzufuegen --prozess "keepass*.exe"',
+                    file=sys.stderr,
+                )
+                return 2
+            for muster, typ in eintraege:
+                neu = database.add_exclusion(muster, typ)
+                if neu is None:
+                    print(f"Steht schon auf der Liste: {muster}")
+                else:
+                    print(f"Aufgenommen (#{neu}): {muster}")
+            return 0
+
+        if aktion == "entfernen":
+            if database.remove_exclusion(args.id):
+                print(f"Muster #{args.id} entfernt.")
+                return 0
+            print(f"Es gibt kein Muster #{args.id}.", file=sys.stderr)
+            return 1
+
+        if aktion == "pruefen":
+            regel = database.exclusions().matching_rule(args.prozess, args.titel)
+            print(f"Prozess: {args.prozess}")
+            print(f"Titel:   {args.titel or '—'}")
+            if regel is None:
+                print("→ wird erfasst (kein Muster greift)")
+            else:
+                print(f"→ wird NICHT erfasst — {regel.label}-Muster {regel.pattern!r}")
+            return 0
+
+        liste = database.exclusions()
+        if liste.is_empty:
+            print("Die Ausschlussliste ist leer — es wird alles erfasst.")
+            return 0
+        print(f"{'Nr.':>4}  {'Typ':<8} Muster")
+        print("-" * 48)
+        for regel in liste:
+            print(f"{regel.id:>4}  {regel.label:<8} {regel.pattern}")
+        print(
+            f"\n{_plural(len(liste), 'Muster', 'Muster')} — passende Fenster werden "
+            "weder gespeichert noch aufgenommen."
+        )
+    return 0
+
+
+def _cmd_screenshots(args: argparse.Namespace, config: Config) -> int:
+    day = _parse_day(args.tag)
+    with _open_database(config) as database:
+        eintraege = database.screenshots(day=day, limit=args.anzahl)
+
+    if not eintraege:
+        print("Keine Aufnahmen gefunden.")
+        if not config.screenshots.enabled:
+            print("Screenshots sind abgeschaltet ([screenshots] aktiv = false).")
+        return 0
+
+    for eintrag in reversed(eintraege):
+        zeitpunkt = timeutil.to_local(eintrag.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        text = eintrag.ocr_text or ""
+        verbleib = (
+            f"Bild: {eintrag.screenshot_path}"
+            if eintrag.image_available
+            else "Bild gelöscht"
+        )
+        print(f"{zeitpunkt}  {len(text):>5} Zeichen  {verbleib}")
+        if args.text and text:
+            for zeile in text.splitlines():
+                print(f"    {zeile}")
+            print()
+        elif text:
+            print(f"    {_shorten(text.replace(chr(10), ' '), 96)}")
+    return 0
+
+
+def _cmd_verschluesseln(args: argparse.Namespace, config: Config) -> int:
+    pfad = config.database_path
+    if not pfad.is_file():
+        print(f"Es gibt noch keine Datenbank unter {pfad}.", file=sys.stderr)
+        print(
+            "Für eine neue Datenbank genügt [speicher] verschluesselt = true "
+            "in der Konfiguration.",
+            file=sys.stderr,
+        )
+        return 1
+    if not crypto.encryption_available():
+        print(str(crypto.EncryptionUnavailable()), file=sys.stderr)
+        return 3
+    if crypto.is_encrypted(pfad):
+        print(f"{pfad} ist bereits verschlüsselt.")
+        return 0
+
+    schluessel_datei = config.key_file
+    print(f"Datenbank:      {pfad}")
+    print(f"Schlüsseldatei: {schluessel_datei}")
+    print(
+        "\nDie Klartext-Fassung bleibt als Sicherung liegen. Ohne die "
+        "Schlüsseldatei\nsind die Daten danach nicht mehr lesbar — es gibt keine "
+        "Hintertür."
+    )
+    if not args.ja:
+        antwort = input("\nFortfahren? [j/N] ").strip().lower()
+        if antwort not in {"j", "ja", "y", "yes"}:
+            print("Abgebrochen.")
+            return 1
+
+    schluessel = crypto.load_or_create_key(schluessel_datei)
+    sicherung = crypto.encrypt_database(pfad, schluessel)
+    print(f"\nFertig. Verschlüsselt: {pfad}")
+    print(f"Klartext-Sicherung:    {sicherung}")
+    print(
+        "\nJetzt in der Konfiguration [speicher] verschluesselt = true setzen "
+        "und die\nSicherung löschen, sobald alles läuft."
+    )
+    return 0
+
+
 def _cmd_dashboard(args: argparse.Namespace, config: Config) -> int:
     try:
         run_dashboard(
@@ -467,16 +669,24 @@ def _cmd_config(args: argparse.Namespace, config: Config) -> int:
             print(f"Es gibt bereits eine Konfiguration: {exc}", file=sys.stderr)
             return 1
         print(f"Konfigurationsvorlage angelegt: {written}")
-        regeln = written.parent / "categories.yaml"
-        try:
-            write_default_categories(regeln)
-            print(f"Regeldatei angelegt:            {regeln}")
-        except FileExistsError:
-            print(f"Regeldatei bleibt unverändert:  {regeln}")
+        for pfad, schreiber, name in (
+            (written.parent / "categories.yaml", write_default_categories, "Kategorien"),
+            (written.parent / "exclusions.yaml", write_default_exclusions, "Ausschluss"),
+        ):
+            try:
+                schreiber(pfad)
+                print(f"{name + ':':<12} angelegt          {pfad}")
+            except FileExistsError:
+                print(f"{name + ':':<12} bleibt unverändert {pfad}")
         return 0
 
     print(f"Quelle:            {config.source or 'Vorgabewerte (keine Datei gefunden)'}")
     print(f"Datenbank:         {config.database_path}")
+    ausschluss = config.exclusions_path
+    print(
+        f"Ausschluss-Vorlage {ausschluss}"
+        + ("" if ausschluss.is_file() else "  (nicht vorhanden → eingebaute Vorlage)")
+    )
     regeln = config.categories_path
     print(f"Regeldatei         {regeln}{'' if regeln.is_file() else '  (nicht vorhanden → eingebaute Regeln)'}")
     print(f"Intervall          {config.capture.interval_seconds:g} s")
@@ -486,6 +696,8 @@ def _cmd_config(args: argparse.Namespace, config: Config) -> int:
     print(f"Fenstertitel       {config.capture.store_window_titles}")
     print(f"Fokus ab           {config.analysis.focus_minimum_seconds:g} s")
     print(f"Toleranz           {config.analysis.interruption_tolerance_seconds:g} s")
+    print(f"Screenshots        {'an' if config.screenshots.enabled else 'aus'}")
+    print(f"Verschlüsselung    {'an' if config.storage.encrypted else 'aus'}")
     print(f"Dashboard          http://{config.dashboard.host}:{config.dashboard.port}/")
     if config.source is None:
         print("\nMit 'fokusradar config --anlegen' eine Konfigurationsdatei erzeugen.")
@@ -505,6 +717,12 @@ def main(argv: list[str] | None = None) -> int:
     except CategoryError as exc:
         print(f"Fehler in den Regeln: {exc}", file=sys.stderr)
         return 2
+    except ExclusionError as exc:
+        print(f"Fehler in der Ausschlussliste: {exc}", file=sys.stderr)
+        return 2
+    except (DatabaseLocked, crypto.EncryptionUnavailable) as exc:
+        print(str(exc), file=sys.stderr)
+        return 3
     except ValueError as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 2

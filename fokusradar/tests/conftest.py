@@ -7,6 +7,7 @@ getestet — damit laufen die Tests auf jedem System, auch ohne Bildschirm.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -117,3 +118,47 @@ def config(tmp_path) -> Config:
 def database(config) -> Database:
     with Database(config.database_path) as db:
         yield db
+
+
+class FakeScreenshotBackend:
+    """Legt statt eines Bildschirmfotos eine Platzhalterdatei an."""
+
+    name = "fake"
+
+    def __init__(self, *, works: bool = True) -> None:
+        self.works = works
+        self.captures: list[Path] = []
+
+    def available(self) -> bool:
+        return True
+
+    def unavailable_reason(self) -> str | None:
+        return None if self.works else "Attrappe soll scheitern"
+
+    def capture(self, target: Path) -> Path | None:
+        if not self.works:
+            return None
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"PNG-Attrappe")
+        self.captures.append(target)
+        return target
+
+
+class FakeOcrBackend:
+    """Liefert immer denselben erkannten Text."""
+
+    name = "fake"
+
+    def __init__(self, text: str | None = "Kostenstelle 4711\n\n   Angebot   ") -> None:
+        self.result = text
+        self.calls = 0
+
+    def available(self) -> bool:
+        return True
+
+    def unavailable_reason(self) -> str | None:
+        return None
+
+    def text(self, image: Path) -> str | None:
+        self.calls += 1
+        return self.result

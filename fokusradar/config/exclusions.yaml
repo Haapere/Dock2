@@ -1,0 +1,21 @@
+# FokusRadar — Startvorlage der Ausschlussliste
+#
+# Fenster, die auf eines dieser Muster passen, werden nie erfasst: weder
+# Prozessname noch Titel noch Screenshot. Diese Datei wird einmalig
+# übernommen, solange die Ausschlussliste in der Datenbank leer ist.
+# Danach ist die Datenbank maßgeblich — zu pflegen im Dashboard oder mit
+#   fokusradar ausschluss hinzufuegen --prozess "keepass*.exe"
+
+prozesse:
+  - keepass*.exe
+  - 1password*.exe
+  - bitwarden*.exe
+  - lastpass*.exe
+  - "*keychain*"
+
+titel:
+  - online-banking
+  - onlinebanking
+  - passwort
+  - password manager
+  - tan-eingabe

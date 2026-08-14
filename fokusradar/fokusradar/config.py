@@ -5,9 +5,9 @@ Die Einstellungen liegen in einer TOML-Datei (Standard:
 ``~/.config/fokusradar/config.toml``). Fehlt die Datei, gelten die Vorgaben aus
 diesem Modul — FokusRadar ist also ohne vorherige Einrichtung startklar.
 
-Für Phase 1 sind nur die Abschnitte ``[erfassung]`` und ``[speicher]``
-relevant; die Regeldateien ``categories.yaml``/``exclusions.yaml`` aus dem
-Bauplan kommen in Phase 2 bzw. 3 dazu.
+Neben dieser Datei liegen die beiden Regeldateien ``categories.yaml``
+(Kategorien, Phase 2) und ``exclusions.yaml`` (Startvorlage der Ausschlussliste,
+Phase 3).
 """
 
 from __future__ import annotations
@@ -35,10 +35,36 @@ aktivitaets_intervall_sekunden = 60
 eingaben_zaehlen = "auto"
 # Fenstertitel mitspeichern. false = nur Prozessnamen (datensparsamer)
 fenstertitel_speichern = true
+# Solange eines dieser Programme im Vordergrund ist, pausiert die Erfassung
+# komplett (Smart Pause für Videocalls)
+pause_prozesse = ["teams.exe", "ms-teams.exe", "zoom.exe", "webex.exe", "skype.exe"]
 
 [speicher]
 # Pfad zur SQLite-Datenbank; leer = Standardpfad im Benutzerprofil
 datenbank = ""
+# Datenbank mit SQLCipher verschlüsseln (braucht das Extra [krypto]).
+# Umstellen einer vorhandenen Datenbank: fokusradar verschluesseln
+verschluesselt = false
+# Datei mit dem Schlüssel; leer = schluessel.key neben der Datenbank.
+# Alternativ den Schlüssel in der Umgebungsvariablen FOKUSRADAR_KEY setzen.
+schluessel_datei = ""
+
+[screenshots]
+# Standardmäßig aus. Erst einschalten, wenn die Ausschlussliste steht —
+# Screenshots sind die eingreifendste Funktion von FokusRadar.
+aktiv = false
+# Abstand zwischen zwei Aufnahmen (Bauplan: 5-10 Minuten)
+intervall_sekunden = 600
+# Ablageort der Bilder; leer = Unterordner "screenshots" neben der Datenbank
+verzeichnis = ""
+# Lokale Texterkennung auf der Aufnahme (braucht das Extra [ocr] und Tesseract)
+ocr = true
+# Sprachen für Tesseract
+ocr_sprachen = "deu+eng"
+# Bild nach der Texterkennung löschen — nur der erkannte Text bleibt
+bild_loeschen = true
+# Erkannten Text auf so viele Zeichen kürzen
+text_maximallaenge = 4000
 
 [analyse]
 # Ab dieser Dauer gilt ein zusammenhängender Block als Fokus-Session
@@ -68,6 +94,14 @@ class CaptureConfig:
     activity_interval_seconds: float = 60.0
     count_input_events: bool | str = "auto"
     store_window_titles: bool = True
+    #: Prozesse, bei denen die Erfassung komplett pausiert (Videocalls).
+    pause_processes: tuple[str, ...] = (
+        "teams.exe",
+        "ms-teams.exe",
+        "zoom.exe",
+        "webex.exe",
+        "skype.exe",
+    )
 
 
 @dataclass(frozen=True)
@@ -85,6 +119,27 @@ class AnalysisConfig:
 
 
 @dataclass(frozen=True)
+class ScreenshotConfig:
+    """Einstellungen für Screenshots und lokale Texterkennung (Phase 3)."""
+
+    enabled: bool = False
+    interval_seconds: float = 600.0
+    directory: Path | None = None
+    ocr: bool = True
+    ocr_languages: str = "deu+eng"
+    delete_image: bool = True
+    text_max_length: int = 4000
+
+
+@dataclass(frozen=True)
+class StorageConfig:
+    """Einstellungen der Datenhaltung (Phase 3: Verschlüsselung)."""
+
+    encrypted: bool = False
+    key_file: Path | None = None
+
+
+@dataclass(frozen=True)
 class DashboardConfig:
     """Einstellungen der lokalen Weboberfläche (Phase 2)."""
 
@@ -98,17 +153,42 @@ class Config:
 
     capture: CaptureConfig = field(default_factory=CaptureConfig)
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
+    screenshots: ScreenshotConfig = field(default_factory=ScreenshotConfig)
+    storage: StorageConfig = field(default_factory=StorageConfig)
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     database_path: Path = field(default_factory=lambda: default_database_path())
     source: Path | None = None
 
     @property
+    def config_dir(self) -> Path:
+        """Verzeichnis, in dem Konfiguration und Regeldateien liegen."""
+        return self.source.parent if self.source is not None else default_config_path().parent
+
+    @property
     def categories_path(self) -> Path:
-        """Pfad der Regeldatei: aus der Konfiguration oder neben ihr."""
+        """Pfad der Kategorien-Regeln: aus der Konfiguration oder daneben."""
         if self.analysis.categories_path is not None:
             return self.analysis.categories_path
-        base = self.source.parent if self.source is not None else default_config_path().parent
-        return base / "categories.yaml"
+        return self.config_dir / "categories.yaml"
+
+    @property
+    def exclusions_path(self) -> Path:
+        """Startvorlage der Ausschlussliste (die gültige Liste steht in der DB)."""
+        return self.config_dir / "exclusions.yaml"
+
+    @property
+    def screenshot_dir(self) -> Path:
+        """Ablageort der Bilder: aus der Konfiguration oder neben der Datenbank."""
+        if self.screenshots.directory is not None:
+            return self.screenshots.directory
+        return self.database_path.parent / "screenshots"
+
+    @property
+    def key_file(self) -> Path:
+        """Datei mit dem Datenbankschlüssel."""
+        if self.storage.key_file is not None:
+            return self.storage.key_file
+        return self.database_path.parent / "schluessel.key"
 
     def with_overrides(
         self,
@@ -181,6 +261,22 @@ def _positive_number(section: dict[str, Any], key: str, fallback: float) -> floa
     return float(value)
 
 
+def _string_list(section: dict[str, Any], key: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
+    value = section.get(key)
+    if value is None:
+        return fallback
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ConfigError(f"'{key}' muss eine Liste von Texten sein, gefunden: {value!r}")
+    return tuple(item.strip() for item in value if item.strip())
+
+
+def _optional_path(section: dict[str, Any], key: str) -> Path | None:
+    value = section.get(key, "")
+    if not isinstance(value, str):
+        raise ConfigError(f"'{key}' muss ein Pfad als Text sein")
+    return Path(value).expanduser() if value.strip() else None
+
+
 def _boolean(section: dict[str, Any], key: str, fallback: bool) -> bool:
     value = section.get(key, fallback)
     if not isinstance(value, bool):
@@ -233,6 +329,9 @@ def load_config(path: Path | None = None) -> Config:
         ),
         count_input_events=count_input,
         store_window_titles=_boolean(capture_section, "fenstertitel_speichern", True),
+        pause_processes=_string_list(
+            capture_section, "pause_prozesse", CaptureConfig().pause_processes
+        ),
     )
 
     database_raw = storage_section.get("datenbank", "")
@@ -240,6 +339,29 @@ def load_config(path: Path | None = None) -> Config:
         raise ConfigError("'datenbank' muss ein Pfad als Text sein")
     database_path = (
         Path(database_raw).expanduser() if database_raw.strip() else default_database_path()
+    )
+
+    storage = StorageConfig(
+        encrypted=_boolean(storage_section, "verschluesselt", False),
+        key_file=_optional_path(storage_section, "schluessel_datei"),
+    )
+
+    screenshot_section = raw.get("screenshots", {})
+    if not isinstance(screenshot_section, dict):
+        raise ConfigError("Abschnitt [screenshots] muss eine Tabelle sein")
+    languages = screenshot_section.get("ocr_sprachen", "deu+eng")
+    if not isinstance(languages, str) or not languages.strip():
+        raise ConfigError(f"'ocr_sprachen' muss ein Text sein, gefunden: {languages!r}")
+    screenshots = ScreenshotConfig(
+        enabled=_boolean(screenshot_section, "aktiv", False),
+        interval_seconds=_positive_number(screenshot_section, "intervall_sekunden", 600.0),
+        directory=_optional_path(screenshot_section, "verzeichnis"),
+        ocr=_boolean(screenshot_section, "ocr", True),
+        ocr_languages=languages.strip(),
+        delete_image=_boolean(screenshot_section, "bild_loeschen", True),
+        text_max_length=int(
+            _positive_number(screenshot_section, "text_maximallaenge", 4000.0)
+        ),
     )
 
     analysis_section = raw.get("analyse", {})
@@ -284,6 +406,8 @@ def load_config(path: Path | None = None) -> Config:
     return Config(
         capture=capture,
         analysis=analysis,
+        screenshots=screenshots,
+        storage=storage,
         dashboard=dashboard,
         database_path=database_path,
         source=config_path,

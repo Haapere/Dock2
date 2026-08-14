@@ -1,8 +1,8 @@
 """Zugriff auf die lokale SQLite-Datenbank.
 
-Alle Rohdaten bleiben in dieser Datei auf dem Gerät. Die Verschlüsselung per
-SQLCipher ist für Phase 3 vorgesehen; bis dahin sollte die Datenbank im
-Benutzerprofil liegen (Standardpfad) und nicht in einem Sync-Ordner.
+Alle Rohdaten bleiben in dieser Datei auf dem Gerät. Auf Wunsch verschlüsselt
+FokusRadar sie mit SQLCipher (``[speicher] verschluesselt = true``, siehe
+``fokusradar.storage.crypto``).
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ from pathlib import Path
 
 from fokusradar import timeutil
 from fokusradar.capture.base import WindowInfo
+from fokusradar.processing.exclusions import ExclusionList, ExclusionRule
+from fokusradar.storage import crypto
 from fokusradar.storage.schema import apply_schema
 
 
@@ -70,6 +72,21 @@ class Suggestion:
 
 
 @dataclass(frozen=True)
+class ScreenshotRecord:
+    """Ein Screenshot-Eintrag: erkannter Text und Verbleib des Bildes."""
+
+    id: int
+    timestamp: datetime
+    ocr_text: str | None
+    screenshot_path: str | None
+    deleted_at: datetime | None
+
+    @property
+    def image_available(self) -> bool:
+        return self.screenshot_path is not None and self.deleted_at is None
+
+
+@dataclass(frozen=True)
 class AppTotal:
     """Aufsummierte Nutzung eines Programms in einem Zeitraum."""
 
@@ -78,12 +95,38 @@ class AppTotal:
     events: int
 
 
+class DatabaseLocked(RuntimeError):
+    """Die Datenbank lässt sich mit diesem Schlüssel nicht öffnen."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(
+            f"{path} lässt sich mit dem hinterlegten Schlüssel nicht öffnen.\n"
+            "Stimmt die Schlüsseldatei (bzw. FOKUSRADAR_KEY)? Ist die Datenbank "
+            "überhaupt schon verschlüsselt? Umstellen: fokusradar verschluesseln"
+        )
+
+
 class Database:
     """Schmale Hülle um ``sqlite3`` mit den Abfragen von FokusRadar."""
 
-    def __init__(self, path: Path | str) -> None:
+    def __init__(
+        self, path: Path | str, *, encrypted: bool = False, key: str | None = None
+    ) -> None:
         self.path = Path(path).expanduser()
+        self.encrypted = encrypted
+        self._key = key
         self._connection: sqlite3.Connection | None = None
+
+    @classmethod
+    def from_config(cls, config) -> "Database":
+        """Datenbank gemäß Konfiguration öffnen — inklusive Verschlüsselung."""
+        if not config.storage.encrypted:
+            return cls(config.database_path)
+        return cls(
+            config.database_path,
+            encrypted=True,
+            key=crypto.load_or_create_key(config.key_file),
+        )
 
     # -- Verbindung ---------------------------------------------------------
 
@@ -93,8 +136,21 @@ class Database:
             return self._connection
         if str(self.path) != ":memory:":
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(str(self.path), isolation_level=None)
-        connection.row_factory = sqlite3.Row
+        if self.encrypted:
+            module = crypto.sqlcipher_module()
+            connection = module.connect(str(self.path), isolation_level=None)
+            crypto.apply_key(connection, self._key or "")
+            try:
+                connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
+            except Exception as exc:  # sqlcipher meldet "file is not a database"
+                connection.close()
+                raise DatabaseLocked(self.path) from exc
+            # SQLCipher bringt eine eigene Row-Klasse mit; sqlite3.Row passt nicht
+            # zu dessen Cursor.
+            connection.row_factory = module.Row
+        else:
+            connection = sqlite3.connect(str(self.path), isolation_level=None)
+            connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode = WAL")
         connection.execute("PRAGMA synchronous = NORMAL")
         connection.execute("PRAGMA foreign_keys = ON")
@@ -426,6 +482,112 @@ class Database:
             "UPDATE suggestions SET dismissed = 1 WHERE id = ?", (suggestion_id,)
         )
         return cursor.rowcount > 0
+
+    # -- Ausschlussliste und Screenshots (Phase 3) ---------------------------
+
+    def exclusions(self) -> ExclusionList:
+        """Gültige Ausschlussliste aus der Datenbank."""
+        return ExclusionList(
+            [
+                ExclusionRule(
+                    pattern=row["pattern"],
+                    pattern_type=row["pattern_type"],
+                    id=row["id"],
+                )
+                for row in self.connection.execute(
+                    "SELECT * FROM exclusion_list ORDER BY pattern_type, pattern"
+                )
+            ]
+        )
+
+    def add_exclusion(self, pattern: str, pattern_type: str = "process") -> int | None:
+        """Muster aufnehmen; gibt die ID zurück (``None``, wenn schon vorhanden)."""
+        rule = ExclusionRule(pattern.strip(), pattern_type)
+        vorhanden = self.connection.execute(
+            "SELECT id FROM exclusion_list WHERE pattern = ? AND pattern_type = ?",
+            (rule.pattern, rule.pattern_type),
+        ).fetchone()
+        if vorhanden is not None:
+            return None
+        cursor = self.connection.execute(
+            "INSERT INTO exclusion_list (pattern, pattern_type) VALUES (?, ?)",
+            (rule.pattern, rule.pattern_type),
+        )
+        return int(cursor.lastrowid)
+
+    def remove_exclusion(self, exclusion_id: int) -> bool:
+        """Muster löschen."""
+        cursor = self.connection.execute(
+            "DELETE FROM exclusion_list WHERE id = ?", (exclusion_id,)
+        )
+        return cursor.rowcount > 0
+
+    def seed_exclusions(self, template: ExclusionList) -> int:
+        """Vorlage übernehmen, solange die Liste leer ist.
+
+        Gibt die Anzahl der übernommenen Muster zurück (0, wenn schon etwas
+        drinsteht — eine gepflegte Liste wird nie überschrieben).
+        """
+        if len(self.exclusions()) > 0:
+            return 0
+        uebernommen = 0
+        for rule in template:
+            if self.add_exclusion(rule.pattern, rule.pattern_type) is not None:
+                uebernommen += 1
+        return uebernommen
+
+    def record_screenshot(
+        self,
+        at: datetime,
+        *,
+        ocr_text: str | None = None,
+        screenshot_path: str | None = None,
+        deleted_at: datetime | None = None,
+    ) -> int:
+        """Screenshot-Eintrag speichern (Text und/oder Ablageort des Bildes)."""
+        cursor = self.connection.execute(
+            "INSERT INTO screenshots_meta (timestamp, ocr_text, screenshot_path, deleted_at)"
+            " VALUES (?, ?, ?, ?)",
+            (
+                timeutil.isoformat(at),
+                ocr_text,
+                screenshot_path,
+                timeutil.isoformat(deleted_at) if deleted_at else None,
+            ),
+        )
+        return int(cursor.lastrowid)
+
+    def mark_screenshot_deleted(self, screenshot_id: int, at: datetime) -> None:
+        """Vermerken, dass das Bild gelöscht wurde (der Text bleibt)."""
+        self.connection.execute(
+            "UPDATE screenshots_meta SET deleted_at = ? WHERE id = ?",
+            (timeutil.isoformat(at), screenshot_id),
+        )
+
+    def screenshots(
+        self, *, day: date | None = None, limit: int | None = None
+    ) -> list[ScreenshotRecord]:
+        """Screenshot-Einträge, neueste zuerst."""
+        query = "SELECT * FROM screenshots_meta"
+        params: list[object] = []
+        if day is not None:
+            start, end = timeutil.local_day_bounds(day)
+            query += " WHERE timestamp >= ? AND timestamp < ?"
+            params += [start, end]
+        query += " ORDER BY timestamp DESC, id DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        return [
+            ScreenshotRecord(
+                id=row["id"],
+                timestamp=timeutil.parse(row["timestamp"]),
+                ocr_text=row["ocr_text"],
+                screenshot_path=row["screenshot_path"],
+                deleted_at=timeutil.parse(row["deleted_at"]) if row["deleted_at"] else None,
+            )
+            for row in self.connection.execute(query, params)
+        ]
 
     def tracked_days(self) -> list[date]:
         """Alle lokalen Kalendertage mit Daten, neueste zuerst."""

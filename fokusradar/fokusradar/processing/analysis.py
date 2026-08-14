@@ -17,13 +17,16 @@ Begriffe:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from fokusradar import timeutil
 from fokusradar.config import AnalysisConfig
 from fokusradar.processing.categories import Categorizer
-from fokusradar.storage.db import Database, WindowEvent
+
+if TYPE_CHECKING:  # nur für die Typannotationen — sonst gäbe es einen Importzirkel
+    from fokusradar.storage.db import Database, WindowEvent
 
 TOP_LIST_LENGTH = 5
 
@@ -122,7 +125,7 @@ class DayAnalysis:
 
 
 def analyze_day(
-    database: Database,
+    database: "Database",
     categorizer: Categorizer,
     day: date,
     config: AnalysisConfig | None = None,
@@ -191,7 +194,7 @@ def analyze_day(
 
 
 def find_focus_sessions(
-    events: list[WindowEvent], categorizer: Categorizer, config: AnalysisConfig
+    events: list["WindowEvent"], categorizer: Categorizer, config: AnalysisConfig
 ) -> list[FocusSession]:
     """Zusammenhängende Fokus-Blöcke aus den Fensternutzungen ableiten."""
     tolerance = timedelta(seconds=config.interruption_tolerance_seconds)
@@ -322,7 +325,7 @@ def build_local_suggestions(analysis: DayAnalysis, config: AnalysisConfig) -> li
     return [text for _priority, text in kandidaten[:3]]
 
 
-def store_analysis(database: Database, analysis: DayAnalysis) -> None:
+def store_analysis(database: "Database", analysis: DayAnalysis) -> None:
     """Zusammenfassung und lokale Vorschläge in der Datenbank ablegen."""
     database.save_daily_summary(
         analysis.day,
@@ -338,7 +341,7 @@ def store_analysis(database: Database, analysis: DayAnalysis) -> None:
 
 
 def analyze_days(
-    database: Database,
+    database: "Database",
     categorizer: Categorizer,
     days: list[date],
     config: AnalysisConfig | None = None,
@@ -357,14 +360,6 @@ def last_days(end: date, count: int) -> list[date]:
     return [end - timedelta(days=offset) for offset in range(count - 1, -1, -1)]
 
 
-def _with_category(event: WindowEvent, assignment: tuple[int, str]) -> WindowEvent:
+def _with_category(event: "WindowEvent", assignment: tuple[int, str]) -> "WindowEvent":
     """Kopie der Fensternutzung mit gesetzter Kategorie."""
-    return WindowEvent(
-        id=event.id,
-        started_at=event.started_at,
-        process_name=event.process_name,
-        window_title=event.window_title,
-        category=assignment[1],
-        ended_at=event.ended_at,
-        duration_seconds=event.duration_seconds,
-    )
+    return replace(event, category=assignment[1])

@@ -256,9 +256,144 @@ def test_config_anlegen_erzeugt_auch_die_regeldatei(tmp_path, capsys):
     ausgabe = capsys.readouterr().out
 
     assert (tmp_path / "categories.yaml").is_file()
-    assert "Regeldatei angelegt" in ausgabe
+    assert (tmp_path / "exclusions.yaml").is_file()
+    assert "Kategorien:  angelegt" in ausgabe
+    assert "Ausschluss:  angelegt" in ausgabe
 
     assert main(["--config", str(pfad), "config"]) == 0
     anzeige = capsys.readouterr().out
     assert "Regeldatei" in anzeige
     assert "Dashboard          http://127.0.0.1:8760/" in anzeige
+
+
+def test_ausschluss_wird_beim_ersten_start_aus_der_vorlage_gefuellt(tmp_path, db_pfad, capsys):
+    config_pfad = tmp_path / "config.toml"
+    config_pfad.write_text("[erfassung]\n", encoding="utf-8")
+    (tmp_path / "exclusions.yaml").write_text(
+        "prozesse:\n  - tresor.exe\ntitel:\n  - geheim\n", encoding="utf-8"
+    )
+
+    assert main(["--config", str(config_pfad), "--db", str(db_pfad), "ausschluss"]) == 0
+    ausgabe = capsys.readouterr()
+    assert "aus der Vorlage übernommen" in ausgabe.err
+    assert "tresor.exe" in ausgabe.out
+    assert "geheim" in ausgabe.out
+
+    # Zweiter Aufruf: keine erneute Übernahme.
+    assert main(["--config", str(config_pfad), "--db", str(db_pfad), "ausschluss"]) == 0
+    assert "übernommen" not in capsys.readouterr().err
+
+
+def test_ausschluss_pflegen_und_pruefen(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "ausschluss", "hinzufuegen", "--prozess", "tresor.exe"]) == 0
+    assert "Aufgenommen" in capsys.readouterr().out
+
+    assert main(["--db", str(db_pfad), "ausschluss", "pruefen", "tresor.exe"]) == 0
+    assert "wird NICHT erfasst" in capsys.readouterr().out
+
+    assert main(["--db", str(db_pfad), "ausschluss", "pruefen", "code.exe"]) == 0
+    assert "wird erfasst" in capsys.readouterr().out
+
+    with Database(db_pfad) as db:
+        regel_id = [r for r in db.exclusions() if r.pattern == "tresor.exe"][0].id
+    assert main(["--db", str(db_pfad), "ausschluss", "entfernen", str(regel_id)]) == 0
+    assert "entfernt" in capsys.readouterr().out
+    assert main(["--db", str(db_pfad), "ausschluss", "entfernen", str(regel_id)]) == 1
+
+
+def test_ausschluss_hinzufuegen_ohne_muster_meldet_fehler(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "ausschluss", "hinzufuegen"]) == 2
+    assert "--prozess oder --titel" in capsys.readouterr().err
+
+
+def test_screenshots_zeigen_erkannten_text(db_pfad, capsys):
+    with Database(db_pfad) as db:
+        db.record_screenshot(
+            datetime.now().astimezone(),
+            ocr_text="Angebot 4711\nKostenstelle",
+            deleted_at=datetime.now().astimezone(),
+        )
+
+    assert main(["--db", str(db_pfad), "screenshots"]) == 0
+    kurz = capsys.readouterr().out
+    assert "Bild gelöscht" in kurz
+    assert "Angebot 4711" in kurz
+
+    assert main(["--db", str(db_pfad), "screenshots", "--text"]) == 0
+    lang = capsys.readouterr().out
+    assert "    Kostenstelle" in lang
+
+
+def test_screenshots_ohne_aufnahmen(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "screenshots"]) == 0
+    ausgabe = capsys.readouterr().out
+    assert "Keine Aufnahmen" in ausgabe
+    assert "abgeschaltet" in ausgabe
+
+
+def test_verschluesseln_ohne_datenbank(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "verschluesseln", "--ja"]) == 1
+    assert "noch keine Datenbank" in capsys.readouterr().err
+
+
+def test_verschluesseln_stellt_die_datenbank_um(tmp_path, capsys, monkeypatch):
+    pytest.importorskip("sqlcipher3", reason="Extra [krypto] nicht installiert")
+    from fokusradar.storage import crypto
+
+    monkeypatch.delenv(crypto.KEY_ENV_VAR, raising=False)
+    db_pfad = tmp_path / "fokusradar.db"
+    _tagesdaten(db_pfad)
+
+    assert main(["--db", str(db_pfad), "verschluesseln", "--ja"]) == 0
+    ausgabe = capsys.readouterr().out
+    assert "Fertig" in ausgabe
+    assert crypto.is_encrypted(db_pfad)
+    assert (tmp_path / "schluessel.key").is_file()
+    assert (tmp_path / "fokusradar.db.unverschluesselt").is_file()
+
+    # Ein zweiter Lauf erkennt den Zustand.
+    assert main(["--db", str(db_pfad), "verschluesseln", "--ja"]) == 0
+    assert "bereits verschlüsselt" in capsys.readouterr().out
+
+
+def test_status_zeigt_verschluesselung_und_ausschluss(tmp_path, capsys, monkeypatch):
+    pytest.importorskip("sqlcipher3", reason="Extra [krypto] nicht installiert")
+    from fokusradar.storage import crypto
+
+    monkeypatch.delenv(crypto.KEY_ENV_VAR, raising=False)
+    db_pfad = tmp_path / "fokusradar.db"
+    _tagesdaten(db_pfad)
+    main(["--db", str(db_pfad), "verschluesseln", "--ja"])
+    capsys.readouterr()
+
+    config_pfad = tmp_path / "config.toml"
+    config_pfad.write_text(
+        f'[speicher]\ndatenbank = "{db_pfad.as_posix()}"\nverschluesselt = true\n'
+        f'schluessel_datei = "{(tmp_path / "schluessel.key").as_posix()}"\n',
+        encoding="utf-8",
+    )
+    assert main(["--config", str(config_pfad), "status"]) == 0
+    ausgabe = capsys.readouterr().out
+    assert "verschlüsselt)" in ausgabe
+    assert "Ausschlussliste:" in ausgabe
+    assert "Smart Pause bei" in ausgabe
+
+
+def test_falscher_schluessel_liefert_exitcode_3(tmp_path, capsys, monkeypatch):
+    pytest.importorskip("sqlcipher3", reason="Extra [krypto] nicht installiert")
+    from fokusradar.storage import crypto
+
+    db_pfad = tmp_path / "fokusradar.db"
+    _tagesdaten(db_pfad)
+    monkeypatch.delenv(crypto.KEY_ENV_VAR, raising=False)
+    main(["--db", str(db_pfad), "verschluesseln", "--ja"])
+    capsys.readouterr()
+
+    config_pfad = tmp_path / "config.toml"
+    config_pfad.write_text(
+        f'[speicher]\ndatenbank = "{db_pfad.as_posix()}"\nverschluesselt = true\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(crypto.KEY_ENV_VAR, "falscher-schluessel")
+    assert main(["--config", str(config_pfad), "status"]) == 3
+    assert "Schlüssel" in capsys.readouterr().err

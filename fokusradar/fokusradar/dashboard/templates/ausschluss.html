@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set block_name = 'ausschluss' %}
+{% block inhalt %}
+
+<div class="karte" style="margin-bottom:1rem;">
+  <strong>Was hier steht, wird nie erfasst.</strong>
+  Passt das aktive Fenster auf eines dieser Muster, speichert FokusRadar weder
+  Prozessnamen noch Fenstertitel noch einen Screenshot. Die Zeit fehlt dann
+  bewusst in der Auswertung.
+</div>
+
+{% if meldung %}
+<div class="karte" style="margin-bottom:1rem; border-color: var(--akzent);">{{ meldung }}</div>
+{% endif %}
+
+<h2>Muster aufnehmen</h2>
+<div class="karte">
+  <form method="post" action="/ausschluss/hinzufuegen"
+        style="display:flex; gap:.6rem; flex-wrap:wrap; align-items:center;">
+    <select name="typ" aria-label="Mustertyp">
+      <option value="process">Prozessname</option>
+      <option value="title">Fenstertitel</option>
+    </select>
+    <input type="text" name="muster" required style="flex:1; min-width:14rem;"
+           placeholder="z. B. keepass*.exe oder online-banking">
+    <button type="submit">Aufnehmen</button>
+  </form>
+  <p style="color:var(--leise); font-size:.85rem; margin:.8rem 0 0;">
+    Prozess-Muster erlauben <code>*</code> und <code>?</code>
+    (<code>keepass*.exe</code>). Titel-Muster sind Teiltreffer
+    (<code>online-banking</code> passt auf „Sparkasse Online-Banking").
+    Groß-/Kleinschreibung spielt keine Rolle.
+  </p>
+</div>
+
+<h2>Aktuelle Liste</h2>
+<div class="karte">
+  {% if regeln %}
+  <table>
+    <thead>
+      <tr><th>Typ</th><th>Muster</th><th style="width:6rem"></th></tr>
+    </thead>
+    <tbody>
+      {% for regel in regeln %}
+      <tr>
+        <td>{{ regel.label }}</td>
+        <td><code>{{ regel.pattern }}</code></td>
+        <td>
+          <form method="post" action="/ausschluss/{{ regel.id }}/entfernen">
+            <button type="submit" title="Muster entfernen">entfernen</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="leer">Die Liste ist leer — es wird alles erfasst.</div>
+  {% endif %}
+</div>
+
+<p style="color:var(--leise); font-size:.8rem;">
+  Maßgeblich ist diese Liste in der Datenbank. Die Datei
+  <code>{{ vorlage }}</code> dient nur als Startvorlage für eine noch leere Liste.
+</p>
+
+{% endblock %}

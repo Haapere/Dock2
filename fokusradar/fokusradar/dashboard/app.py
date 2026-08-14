@@ -12,11 +12,13 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fokusradar import __version__, timeutil
 from fokusradar.config import Config
 from fokusradar.processing.analysis import DayAnalysis, analyze_day, last_days, store_analysis
 from fokusradar.processing.categories import Categorizer
+from fokusradar.processing.exclusions import ExclusionError, ExclusionList
 from fokusradar.storage.db import Database
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
@@ -26,7 +28,7 @@ WEEK_LENGTH = 7
 # Endpunkte über die Modul-Namen auf — ein Import innerhalb der Funktion würde
 # ``Request`` fälschlich zu einem Query-Parameter machen.
 try:  # pragma: no cover - hängt an der Installation
-    from fastapi import FastAPI, Request
+    from fastapi import FastAPI, Form, Request
     from fastapi.responses import HTMLResponse, RedirectResponse
     from fastapi.templating import Jinja2Templates
 
@@ -270,12 +272,14 @@ def create_app(config: Config, categorizer: Categorizer | None = None):
         )
 
     rules = categorizer or Categorizer.load(config.categories_path)
+    with Database.from_config(config) as vorbereitung:
+        vorbereitung.seed_exclusions(ExclusionList.load_template(config.exclusions_path))
     templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
     templates.env.filters["dauer"] = timeutil.format_duration
     app = FastAPI(title="FokusRadar", version=__version__, docs_url=None, redoc_url=None)
 
     def _database() -> Database:
-        return Database(config.database_path)
+        return Database.from_config(config)
 
     def _tag(datum: str | None) -> date:
         if not datum:
@@ -308,6 +312,49 @@ def create_app(config: Config, categorizer: Categorizer | None = None):
         with _database() as database:
             database.dismiss_suggestion(vorschlag_id)
         return RedirectResponse(ziel if ziel.startswith("/") else "/", status_code=303)
+
+    @app.get("/ausschluss", response_class=HTMLResponse)
+    def ausschluss(request: Request, meldung: str | None = None):
+        with _database() as database:
+            liste = database.exclusions()
+        return templates.TemplateResponse(
+            request,
+            "ausschluss.html",
+            {
+                "titel": "Ausschlussliste",
+                "version": __version__,
+                "tag_iso": timeutil.parse_day("heute").isoformat(),
+                "regeln": list(liste),
+                "meldung": meldung,
+                "vorlage": str(config.exclusions_path),
+            },
+        )
+
+    @app.post("/ausschluss/hinzufuegen")
+    def ausschluss_hinzufuegen(muster: str = Form(...), typ: str = Form("process")):
+        muster = muster.strip()
+        if not muster:
+            return RedirectResponse("/ausschluss?meldung=leeres+Muster", status_code=303)
+        try:
+            with _database() as database:
+                neu = database.add_exclusion(muster, typ)
+        except ExclusionError as exc:
+            return RedirectResponse(
+                f"/ausschluss?meldung={quote(str(exc))}", status_code=303
+            )
+        meldung = (
+            f"{muster} steht schon auf der Liste."
+            if neu is None
+            else f"{muster} aufgenommen — passende Fenster werden ab sofort nicht erfasst."
+        )
+        return RedirectResponse(f"/ausschluss?meldung={quote(meldung)}", status_code=303)
+
+    @app.post("/ausschluss/{regel_id}/entfernen")
+    def ausschluss_entfernen(regel_id: int):
+        with _database() as database:
+            entfernt = database.remove_exclusion(regel_id)
+        meldung = "Muster entfernt." if entfernt else "Muster gab es nicht mehr."
+        return RedirectResponse(f"/ausschluss?meldung={quote(meldung)}", status_code=303)
 
     @app.get("/api/tag/{datum}")
     def api_tag(datum: str):

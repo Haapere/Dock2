@@ -13,10 +13,36 @@ aktivitaets_intervall_sekunden = 60
 eingaben_zaehlen = "auto"
 # Fenstertitel mitspeichern. false = nur Prozessnamen (datensparsamer)
 fenstertitel_speichern = true
+# Solange eines dieser Programme im Vordergrund ist, pausiert die Erfassung
+# komplett (Smart Pause für Videocalls)
+pause_prozesse = ["teams.exe", "ms-teams.exe", "zoom.exe", "webex.exe", "skype.exe"]
 
 [speicher]
 # Pfad zur SQLite-Datenbank; leer = Standardpfad im Benutzerprofil
 datenbank = ""
+# Datenbank mit SQLCipher verschlüsseln (braucht das Extra [krypto]).
+# Umstellen einer vorhandenen Datenbank: fokusradar verschluesseln
+verschluesselt = false
+# Datei mit dem Schlüssel; leer = schluessel.key neben der Datenbank.
+# Alternativ den Schlüssel in der Umgebungsvariablen FOKUSRADAR_KEY setzen.
+schluessel_datei = ""
+
+[screenshots]
+# Standardmäßig aus. Erst einschalten, wenn die Ausschlussliste steht —
+# Screenshots sind die eingreifendste Funktion von FokusRadar.
+aktiv = false
+# Abstand zwischen zwei Aufnahmen (Bauplan: 5-10 Minuten)
+intervall_sekunden = 600
+# Ablageort der Bilder; leer = Unterordner "screenshots" neben der Datenbank
+verzeichnis = ""
+# Lokale Texterkennung auf der Aufnahme (braucht das Extra [ocr] und Tesseract)
+ocr = true
+# Sprachen für Tesseract
+ocr_sprachen = "deu+eng"
+# Bild nach der Texterkennung löschen — nur der erkannte Text bleibt
+bild_loeschen = true
+# Erkannten Text auf so viele Zeichen kürzen
+text_maximallaenge = 4000
 
 [analyse]
 # Ab dieser Dauer gilt ein zusammenhängender Block als Fokus-Session

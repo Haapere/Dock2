@@ -2,19 +2,22 @@
 
 Ein Aktivitäts-Monitor für den eigenen Rechner: Er erfasst im Hintergrund, **welches Programm gerade aktiv ist** und **wie viel wirklich gearbeitet wird**, speichert das ausschließlich lokal — und leitet daraus später konkrete Verbesserungsvorschläge zu Fokus und Bedienung ab.
 
-> **Stand: Phase 2 von 6.** Erfassung, Kategorisierung, lokale Auswertung mit Vorschlägen und das Dashboard stehen. Screenshots/OCR, Cloud-Analyse und der Android-Begleiter folgen in den nächsten Phasen (siehe [Fahrplan](#fahrplan)).
+> **Stand: Phase 3 von 6.** Erfassung, Kategorisierung, lokale Auswertung mit Vorschlägen, Dashboard, Ausschlussliste, Screenshots mit lokaler OCR und die verschlüsselte Datenbank stehen. Cloud-Analyse und der Android-Begleiter folgen (siehe [Fahrplan](#fahrplan)).
 
 ## Was erfasst wird — und was nicht
 
 | Wird erfasst | Wird **nicht** erfasst |
 |---|---|
 | Prozessname des aktiven Fensters (`code.exe`) | Tastatureingaben, Passwörter, Zwischenablage |
-| Fenstertitel (abschaltbar) | Fensterinhalte, Screenshots (erst Phase 3, dann konfigurierbar) |
+| Fenstertitel (abschaltbar) | alles, was auf der **Ausschlussliste** steht |
 | Zeitpunkt und Dauer jeder Fensternutzung | irgendetwas, das das Gerät verlässt |
 | Sekunden seit der letzten Eingabe (Idle-Zeit) | *welche* Taste gedrückt wurde |
-| Anzahl der Eingaben pro Messpunkt (optional) | — |
+| Anzahl der Eingaben pro Messpunkt (optional) | Bildschirminhalt, solange Screenshots aus sind (Vorgabe) |
+| Screenshot-Text, wenn eingeschaltet (Bild wird danach gelöscht) | — |
 
-Alle Daten liegen in **einer lokalen SQLite-Datei**. Bis einschließlich Phase 3 gibt es keinerlei Netzwerkzugriff — keine Cloud, keine Telemetrie. Das Dashboard ist ein Server auf `localhost`, der nur die eigene Datenbank liest.
+Alle Daten liegen in **einer lokalen SQLite-Datei**, auf Wunsch mit SQLCipher verschlüsselt. Bis einschließlich Phase 3 gibt es keinerlei Netzwerkzugriff — keine Cloud, keine Telemetrie. Das Dashboard ist ein Server auf `localhost`, der nur die eigene Datenbank liest.
+
+Drei Sperren greifen **vor** dem Speichern: die Ausschlussliste, die Smart Pause bei Videocalls und die Pausenerkennung. Was dort hängen bleibt, landet gar nicht erst in der Datenbank.
 
 ## Installation
 
@@ -30,10 +33,14 @@ Ohne Installation geht es auch direkt aus dem Ordner heraus: `python -m fokusrad
 Optional:
 
 ```bash
-pip install -e ".[dashboard]"   # Weboberfläche (FastAPI, uvicorn, Jinja2)
-pip install -e ".[input]"       # zählt zusätzlich die Eingabe-Frequenz (pynput)
-pip install -e ".[dev]"         # Tests
+pip install -e ".[dashboard]"     # Weboberfläche (FastAPI, uvicorn, Jinja2)
+pip install -e ".[screenshots]"   # Screenshots und OCR (mss, pytesseract)
+pip install -e ".[krypto]"        # verschlüsselte Datenbank (SQLCipher)
+pip install -e ".[input]"         # zählt zusätzlich die Eingabe-Frequenz (pynput)
+pip install -e ".[dev]"           # Tests
 ```
+
+Für die Texterkennung muss zusätzlich **Tesseract** selbst installiert sein ([Windows-Installer](https://github.com/UB-Mannheim/tesseract/wiki), unter Linux `apt install tesseract-ocr tesseract-ocr-deu`).
 
 Einzige Pflichtabhängigkeit ist `PyYAML` — daraus liest FokusRadar die Kategorien (eingebaute Regeln wie eigene `categories.yaml`). Die Erfassung selbst braucht weiterhin nichts weiter.
 
@@ -60,6 +67,11 @@ fokusradar auswerten --tag gestern --woche
 
 # 5. Dashboard im Browser (braucht das Extra [dashboard])
 fokusradar dashboard --browser
+
+# 6. Datenschutz: Ausschlussliste pflegen und Datenbank verschlüsseln
+fokusradar ausschluss liste
+fokusradar ausschluss hinzufuegen --prozess "keepass*.exe"
+fokusradar verschluesseln
 ```
 
 Tagesangaben verstehen `heute`, `gestern`, `-3` (vor drei Tagen) und `2026-08-13`.
@@ -138,9 +150,62 @@ fokusradar dashboard              # http://127.0.0.1:8760/
 fokusradar dashboard --browser    # und Browser gleich öffnen
 ```
 
-Zwei Ansichten: **Tag** (Kennzahlen, Tagesverlauf als Zeitstrahl, Vorschläge, Kategorien, Fokus-Sessions, Programme) und **Woche** (sieben Tage im Vergleich). Dazu `GET /api/tag/<datum>` als JSON — genau die verdichtete Form, die ab Phase 4 an die Claude-API geht.
+Drei Ansichten: **Tag** (Kennzahlen, Tagesverlauf als Zeitstrahl, Vorschläge, Kategorien, Fokus-Sessions, Programme), **Woche** (sieben Tage im Vergleich) und **Ausschluss** (Liste pflegen, siehe unten). Dazu `GET /api/tag/<datum>` als JSON — genau die verdichtete Form, die ab Phase 4 an die Claude-API geht.
 
 Die Seite lädt keine externen Skripte, Schriften oder Bilder und funktioniert offline. Sie hört auf `127.0.0.1`, ist also nicht aus dem Netzwerk erreichbar; `--host` ändert das bewusst nur auf ausdrücklichen Wunsch.
+
+## Ausschlussliste — was nie erfasst wird
+
+Passt das aktive Fenster auf ein Muster der Liste, speichert FokusRadar **nichts**: keinen Prozessnamen, keinen Titel, keinen Screenshot. Die Zeit fehlt dann bewusst in der Auswertung — genau dafür ist die Liste da.
+
+```bash
+fokusradar ausschluss liste
+fokusradar ausschluss hinzufuegen --prozess "keepass*.exe"
+fokusradar ausschluss hinzufuegen --titel "online-banking"
+fokusradar ausschluss pruefen firefox.exe --titel "Sparkasse Online-Banking"
+fokusradar ausschluss entfernen 7
+```
+
+Im Dashboard geht dasselbe unter **Ausschluss** per Formular. Prozess-Muster erlauben `*` und `?`, Titel-Muster sind Teiltreffer; Groß-/Kleinschreibung spielt keine Rolle.
+
+Maßgeblich ist die Liste in der Datenbank. Die Datei [`config/exclusions.yaml`](config/exclusions.yaml) ist nur die **Startvorlage**: Sie wird einmalig übernommen, solange die Liste leer ist — eine gepflegte Liste überschreibt FokusRadar nie. Vorbelegt sind die üblichen Verdächtigen (Passwort-Manager, Banking, TAN-Eingabe).
+
+### Smart Pause bei Videocalls
+
+Solange ein Programm aus `pause_prozesse` im Vordergrund ist (Vorgabe: Teams, Zoom, Webex, Skype), pausiert die Erfassung komplett — kein Fenstereintrag, kein Screenshot. `fokusradar track -v` schreibt beim Umschalten „Erfassung ausgesetzt" bzw. „Erfassung läuft wieder" ins Terminal.
+
+## Screenshots und lokale Texterkennung
+
+**Standardmäßig aus.** Eingeschaltet wird das über `[screenshots] aktiv = true`. Dann nimmt FokusRadar alle paar Minuten (Vorgabe: 10) ein Bild auf, erkennt den Text lokal mit Tesseract, speichert **nur den Text** und löscht das Bild wieder:
+
+```bash
+fokusradar screenshots            # Zeitpunkte und Textanfänge
+fokusradar screenshots --text     # den erkannten Text vollständig
+```
+
+| Einstellung | Vorgabe | Bedeutung |
+|---|---|---|
+| `aktiv` | `false` | Schalter für die ganze Funktion |
+| `intervall_sekunden` | 600 | Abstand zwischen zwei Aufnahmen |
+| `ocr` | `true` | lokale Texterkennung (ohne sie bleibt nur das Bild) |
+| `ocr_sprachen` | `"deu+eng"` | Sprachen für Tesseract |
+| `bild_loeschen` | `true` | Bild nach der Erkennung löschen — empfohlen |
+| `verzeichnis` | leer | Ablage der Bilder; leer = neben der Datenbank |
+
+Aufgenommen wird nur, wenn gerade auch erfasst wird: nicht bei Ausschluss, nicht bei Smart Pause, nicht während einer Pause und nicht, wenn kein erfassbares Fenster im Vordergrund ist. Ist `mss` oder Tesseract nicht installiert, sagen `status` und `track` das im Klartext und die Erfassung läuft ohne Screenshots weiter.
+
+## Verschlüsselte Datenbank
+
+Mit dem Extra `[krypto]` liegt die Datenbank als SQLCipher-Datei auf der Platte — ohne Schlüssel ist sie nicht lesbar, auch nicht mit einem SQLite-Betrachter.
+
+```bash
+pip install -e ".[krypto]"
+fokusradar verschluesseln     # stellt eine vorhandene Datenbank um
+```
+
+Danach in der Konfiguration `[speicher] verschluesselt = true` setzen. Für eine **neue** Datenbank genügt dieser Schalter allein. Der Schlüssel steht in `schluessel.key` neben der Datenbank (Rechte 0600) oder in der Umgebungsvariablen `FOKUSRADAR_KEY`, die Vorrang hat.
+
+`fokusradar verschluesseln` legt die Klartext-Fassung als `*.unverschluesselt` daneben; die bitte nach der Kontrolle löschen. Und ohne Umschweife: **Wer die Schlüsseldatei verliert, verliert die Daten.** Es gibt keine Hintertür.
 
 ## Konfiguration
 
@@ -164,6 +229,10 @@ Ohne Konfigurationsdatei gelten die Vorgabewerte — FokusRadar ist also sofort 
 | `wechsel_schwelle_pro_stunde` | 40 | ab hier weist die Auswertung auf zu viele Wechsel hin |
 | `ablenkung_schwelle_anteil` | 0.2 | ab diesem Anteil Ablenkungszeit gibt es einen Hinweis |
 | `kategorien_datei` | leer | leer = `categories.yaml` neben der Konfiguration |
+| `pause_prozesse` | Teams, Zoom, … | Smart Pause: Erfassung ruht, solange eines davon vorn ist |
+| `verschluesselt` | `false` | Datenbank mit SQLCipher verschlüsseln |
+| `schluessel_datei` | leer | leer = `schluessel.key` neben der Datenbank |
+| `aktiv` (Screenshots) | `false` | Screenshots und OCR einschalten |
 | `host` / `port` | `127.0.0.1` / 8760 | Adresse des Dashboards |
 
 Speicherorte (überschreibbar per `--config`/`--db` oder den Umgebungsvariablen `FOKUSRADAR_CONFIG`/`FOKUSRADAR_DB`):
@@ -172,6 +241,7 @@ Speicherorte (überschreibbar per `--config`/`--db` oder den Umgebungsvariablen 
 |---|---|---|
 | Konfiguration | `%APPDATA%\FokusRadar\config.toml` | `~/.config/fokusradar/config.toml` |
 | Regeldatei | `%APPDATA%\FokusRadar\categories.yaml` | `~/.config/fokusradar/categories.yaml` |
+| Ausschluss-Vorlage | `%APPDATA%\FokusRadar\exclusions.yaml` | `~/.config/fokusradar/exclusions.yaml` |
 | Datenbank | `%LOCALAPPDATA%\FokusRadar\fokusradar.db` | `~/.local/share/fokusradar/fokusradar.db` |
 
 ## Unterstützte Systeme
@@ -195,11 +265,11 @@ fokusradar/
 │   ├── cli.py              # Kommandozeile
 │   ├── config.py           # Konfiguration (TOML) und Standardpfade
 │   ├── timeutil.py         # Zeitzonen, Tagesgrenzen, Formatierung
-│   ├── capture/            # aktives Fenster, Idle-Zeit, Eingabe-Zählung
-│   ├── processing/         # Kategorisierung, Fokus-/Ablenkungsanalyse
-│   ├── storage/            # SQLite-Schema und Abfragen
+│   ├── capture/            # aktives Fenster, Idle-Zeit, Eingaben, Screenshots
+│   ├── processing/         # Kategorien, Ausschlussliste, Fokus-/Ablenkungsanalyse
+│   ├── storage/            # SQLite-Schema, Abfragen, Verschlüsselung
 │   └── dashboard/          # FastAPI-App + Jinja2-Templates
-├── config/                 # Vorlagen: fokusradar.example.toml, categories.yaml
+├── config/                 # Vorlagen: config, categories.yaml, exclusions.yaml
 └── tests/
 ```
 
@@ -207,7 +277,7 @@ Die Erfassung steckt hinter zwei schmalen Schnittstellen (`WindowBackend`, `Idle
 
 ### Datenmodell
 
-Das Schema folgt Abschnitt 6 des Bauplans; die Tabellen späterer Phasen (`screenshots_meta`, `exclusion_list`) werden bereits angelegt. `daily_summaries` und `suggestions` füllt seit Phase 2 die Auswertung.
+Das Schema folgt Abschnitt 6 des Bauplans und ist seit Phase 3 vollständig in Gebrauch: `window_events` und `activity_level` von der Erfassung, `daily_summaries` und `suggestions` von der Auswertung, `screenshots_meta` von der OCR-Kette und `exclusion_list` von der Ausschlussliste.
 
 Eine Ergänzung gibt es bei `window_events`: die Spalten `ended_at` und `duration_seconds`. FokusRadar schreibt **eine Zeile je zusammenhängender Fensternutzung** statt einer Zeile alle drei Sekunden. Das spart rund 99 % der Zeilen, macht die Fokus-Sessions aus Phase 2 zu einer einfachen Abfrage — und weil das Ende laufend fortgeschrieben wird, kostet ein Absturz höchstens ein Erfassungsintervall.
 
@@ -227,7 +297,7 @@ python -m pytest -q
 
 - [x] **Phase 1 — Basis-Tracking:** aktives Fenster, Idle-Erkennung, SQLite, CLI für die Rohdaten
 - [x] **Phase 2 — Kategorisierung & lokale Analyse:** `categories.yaml`, Ablenkungs-/Fokus-Erkennung, Tageszusammenfassung, erstes Dashboard
-- [ ] **Phase 3 — Screenshots & OCR:** periodische Screenshots, lokale OCR, Ausschlussliste, Smart Pause, DB-Verschlüsselung
+- [x] **Phase 3 — Screenshots & OCR:** periodische Screenshots, lokale OCR, Ausschlussliste, Smart Pause, DB-Verschlüsselung
 - [ ] **Phase 4 — Cloud-Hybrid:** Claude-API-Anbindung für die Vorschläge, Prompt-Vorlagen, Kosten-Tracking
 - [ ] **Phase 5 — Android-Begleiter:** App-Nutzungsstatistik via `UsageStatsManager`
 - [ ] **Phase 6 — optional:** Android-Screen-Monitoring, Vision-Analyse einzelner Screenshots

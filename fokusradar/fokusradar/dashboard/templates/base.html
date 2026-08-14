@@ -88,6 +88,14 @@ td.zahl, th.zahl { text-align: right; font-variant-numeric: tabular-nums; }
 .legende i.fokus { background: var(--fokus); }
 .legende i.ablenkung { background: var(--ablenkung); }
 .leer { color: var(--leise); padding: 1.5rem 0; }
+input[type="text"], select, button {
+  font: inherit; color: var(--text); background: var(--karte);
+  border: 1px solid var(--linie); border-radius: .4rem; padding: .35rem .6rem;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--akzent); color: var(--akzent); }
+code { background: var(--grund); border: 1px solid var(--linie);
+       border-radius: .25rem; padding: 0 .25rem; font-size: .9em; }
 footer { color: var(--leise); font-size: .78rem; margin-top: 2.5rem;
          border-top: 1px solid var(--linie); padding-top: .8rem; }
 </style>
@@ -99,6 +107,7 @@ footer { color: var(--leise); font-size: .78rem; margin-top: 2.5rem;
   <nav>
     <a href="/tag/{{ tag_iso }}" {% if block_name == 'tag' %}aria-current="page"{% endif %}>Tag</a>
     <a href="/woche?bis={{ tag_iso }}" {% if block_name == 'woche' %}aria-current="page"{% endif %}>Woche</a>
+    <a href="/ausschluss" {% if block_name == 'ausschluss' %}aria-current="page"{% endif %}>Ausschluss</a>
   </nav>
 </header>
 
