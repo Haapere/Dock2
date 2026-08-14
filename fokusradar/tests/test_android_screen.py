@@ -123,6 +123,21 @@ def test_bild_bleibt_wenn_es_bleiben_soll(database, bild_config, tmp_path):
     assert bericht["bild"] == eintrag.screenshot_path
 
 
+def test_ausschluss_greift_auch_ueber_den_app_namen(database, bild_config, tmp_path):
+    """Titel-Muster prüfen den App-Namen — den schickt das Handy mit."""
+    liste = ExclusionList([ExclusionRule("online-banking", "title")])
+    aufnahme = screen.parse_capture(
+        png_bytes(), device="Pixel-7", package="de.institut.app", label="Online-Banking"
+    )
+
+    bericht = screen.store_capture(
+        database, bild_config, aufnahme, exclusions=liste, now=ZEITPUNKT
+    )
+
+    assert bericht["status"] == "ausgeschlossen"
+    assert database.screenshots() == []
+
+
 def test_ausgeschlossene_app_beruehrt_die_platte_nie(database, bild_config, tmp_path):
     liste = ExclusionList([ExclusionRule("*bank*", "process")])
     aufnahme = screen.parse_capture(png_bytes(), device="Pixel-7", package="de.meinebank.app")
@@ -141,6 +156,24 @@ def test_ausgeschlossene_app_beruehrt_die_platte_nie(database, bild_config, tmp_
     assert database.screenshots() == []
     ordner = tmp_path / "aufnahmen"
     assert not ordner.exists() or not list(ordner.iterdir())
+
+
+def test_bild_bleibt_auch_bei_kaputter_texterkennung_nicht_liegen(
+    database, bild_config, tmp_path
+):
+    class KaputteOcr:
+        def text(self, image):
+            raise RuntimeError("Tesseract ist abgestürzt")
+
+    aufnahme = screen.parse_capture(png_bytes(), device="Pixel-7", package="com.x")
+
+    with pytest.raises(RuntimeError):
+        screen.store_capture(
+            database, bild_config, aufnahme, ocr_backend=KaputteOcr(), now=ZEITPUNKT
+        )
+
+    ordner = tmp_path / "aufnahmen"
+    assert not list(ordner.iterdir()), "das Bild darf nicht liegen bleiben"
 
 
 def test_ohne_texterkennung_wird_nur_der_eintrag_geschrieben(database, bild_config):
@@ -239,6 +272,14 @@ def test_kein_bild_im_rumpf(bild_config):
         "/api/android/bildschirm", content=b"kein bild", headers=KOPF
     )
     assert antwort.status_code == 400
+
+
+def test_zu_grosse_uebertragung_wird_gleich_abgewiesen(bild_config):
+    kopf = {**KOPF, "Content-Length": str(screen.MAX_IMAGE_BYTES + 1)}
+    antwort = _client(bild_config).post(
+        "/api/android/bildschirm", content=png_bytes(), headers=kopf
+    )
+    assert antwort.status_code == 413
 
 
 def test_fehlender_kopf(bild_config):

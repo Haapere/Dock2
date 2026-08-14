@@ -66,7 +66,7 @@ class SyncClient(private val settings: Settings) {
      * Auf dem Rechner läuft die Texterkennung, dort greift die Ausschlussliste,
      * dort wird das Bild gelöscht.
      */
-    fun sendScreen(png: ByteArray, paket: String): SyncAntwort {
+    fun sendScreen(png: ByteArray, paket: String, appName: String? = null): SyncAntwort {
         val adresse = settings.serverUrl.trimEnd('/') + PFAD_BILDSCHIRM
         var verbindung: HttpURLConnection? = null
         return try {
@@ -78,6 +78,9 @@ class SyncClient(private val settings: Settings) {
                 setRequestProperty("Content-Type", "image/png")
                 setRequestProperty("X-FokusRadar-Geraet", settings.deviceName)
                 setRequestProperty("X-FokusRadar-Paket", paket)
+                // Der App-Name, damit auch Titel-Muster der Ausschlussliste
+                // auf dem Rechner greifen können.
+                if (appName != null) setRequestProperty("X-FokusRadar-App", appName)
                 setFixedLengthStreamingMode(png.size)
                 doOutput = true
             }

@@ -115,6 +115,8 @@ def test_nachricht_enthaelt_bild_und_frage(bild):
     # Wirklich das Bild, unverändert.
     assert base64.standard_b64decode(quelle["data"]) == bild.read_bytes()
     assert "\n" not in quelle["data"]
+    # Genau der Text, den --zeigen anzeigt — die Vorschau darf nicht abdriften.
+    assert inhalt[1]["text"] == vision.build_question("Im Vordergrund war code.exe.")
     assert "code.exe" in inhalt[1]["text"]
 
 
@@ -264,6 +266,10 @@ def test_cli_bild_zeigen_sendet_nichts(config, bild, capsys, monkeypatch):
     assert str(bild) in ausgabe
     assert "Gesendet wurde nichts" in ausgabe
     assert "40×20" in ausgabe
+    # Auftrag und Nachricht stehen vollständig da, nicht als Zusammenfassung.
+    assert "Beschreibe **nicht**, was auf dem Bild steht" in ausgabe
+    for zeile in vision.build_question().splitlines():
+        assert zeile in ausgabe
 
 
 def test_cli_bild_ohne_schalter_bricht_ab(config, bild, capsys):
@@ -285,6 +291,167 @@ def test_cli_bild_ohne_vorhandene_aufnahme(config, capsys):
 
     assert code == 1
     assert "--neu" in fehler
+
+
+# -- Wer löscht was? ---------------------------------------------------------
+#
+# Eine mitgegebene Datei gehört dem Nutzer und wird nie angerührt. Eine
+# Aufnahme, die der Aufruf selbst gemacht hat, räumt er wieder weg — auch dann,
+# wenn unterwegs etwas schiefgeht.
+
+
+@pytest.fixture
+def bild_konfig_datei(tmp_path):
+    """Konfiguration mit eingeschalteter Bild-Analyse, auf der Platte."""
+    from fokusradar.config import DEFAULT_CONFIG_TEMPLATE
+
+    datei = tmp_path / "config.toml"
+    text = DEFAULT_CONFIG_TEMPLATE.replace(
+        'datenbank = ""', f'datenbank = "{tmp_path / "test.db"}"'
+    )
+    kopf = text.index("[cloud]")
+    text = (
+        text[:kopf]
+        + text[kopf:]
+        .replace("aktiv = false", "aktiv = true", 1)
+        .replace("bilder_senden = false", "bilder_senden = true", 1)
+    )
+    datei.write_text(text, encoding="utf-8")
+    return datei
+
+
+def _fake_ergebnis():
+    from fokusradar.cloud.client import CloudResult
+
+    return CloudResult(
+        suggestions=[("Leg die Fenster nebeneinander.", "fenster")],
+        model="claude-sonnet-5",
+        input_tokens=1500,
+        output_tokens=80,
+        cost_usd=0.0031,
+    )
+
+
+def test_cli_bild_ruehrt_die_mitgegebene_datei_nicht_an(
+    bild_konfig_datei, bild, capsys, monkeypatch
+):
+    """Eine Datei, die der Nutzer selbst nennt, wird nie gelöscht."""
+    from fokusradar.cli import main
+
+    monkeypatch.setattr(
+        CloudAnalyzer, "analyze_image", lambda self, pfad, **kw: _fake_ergebnis()
+    )
+
+    code = main(["--config", str(bild_konfig_datei), "bild", "--datei", str(bild)])
+    ausgabe = capsys.readouterr().out
+
+    assert code == 0
+    assert bild.is_file(), "die mitgegebene Datei muss liegen bleiben"
+    assert "gelöscht" not in ausgabe
+    assert "Leg die Fenster nebeneinander." in ausgabe
+
+
+def test_cli_bild_neu_raeumt_die_eigene_aufnahme_weg(
+    bild_konfig_datei, tmp_path, capsys, monkeypatch
+):
+    from fokusradar import cli
+
+    aufnahme = tmp_path / "frisch.png"
+    aufnahme.write_bytes(png_bytes())
+    monkeypatch.setattr(cli, "_bild_aufnehmen", lambda config: aufnahme)
+    monkeypatch.setattr(
+        CloudAnalyzer, "analyze_image", lambda self, pfad, **kw: _fake_ergebnis()
+    )
+
+    code = cli.main(["--config", str(bild_konfig_datei), "bild", "--neu"])
+
+    assert code == 0
+    assert not aufnahme.exists()
+    assert "gelöscht" in capsys.readouterr().out
+
+
+def test_cli_bild_neu_raeumt_auch_nach_einem_fehler_weg(
+    bild_konfig_datei, tmp_path, monkeypatch
+):
+    """Ein misslungener Aufruf darf keine Aufnahme liegen lassen."""
+    from fokusradar import cli
+
+    aufnahme = tmp_path / "frisch.png"
+    aufnahme.write_bytes(png_bytes())
+    monkeypatch.setattr(cli, "_bild_aufnehmen", lambda config: aufnahme)
+
+    def scheitert(self, pfad, **kw):
+        raise CloudError("Aufruf der Claude-API fehlgeschlagen: Zeitüberschreitung")
+
+    monkeypatch.setattr(CloudAnalyzer, "analyze_image", scheitert)
+
+    code = cli.main(["--config", str(bild_konfig_datei), "bild", "--neu"])
+
+    assert code == 3
+    assert not aufnahme.exists()
+
+
+def test_cli_bild_neu_mit_zeigen_sendet_nichts_und_raeumt_weg(
+    bild_konfig_datei, tmp_path, capsys, monkeypatch
+):
+    from fokusradar import cli
+
+    aufnahme = tmp_path / "frisch.png"
+    aufnahme.write_bytes(png_bytes())
+    monkeypatch.setattr(cli, "_bild_aufnehmen", lambda config: aufnahme)
+
+    def kein_netz(self, pfad, **kw):  # pragma: no cover - darf nie laufen
+        raise AssertionError("Es hätte kein Aufruf stattfinden dürfen")
+
+    monkeypatch.setattr(CloudAnalyzer, "analyze_image", kein_netz)
+
+    code = cli.main(["--config", str(bild_konfig_datei), "bild", "--neu", "--zeigen"])
+
+    assert code == 0
+    assert not aufnahme.exists()
+    assert "Gesendet wurde nichts" in capsys.readouterr().out
+
+
+def test_cli_bild_behalten_laesst_die_aufnahme_liegen(
+    bild_konfig_datei, tmp_path, monkeypatch
+):
+    from fokusradar import cli
+
+    aufnahme = tmp_path / "frisch.png"
+    aufnahme.write_bytes(png_bytes())
+    monkeypatch.setattr(cli, "_bild_aufnehmen", lambda config: aufnahme)
+    monkeypatch.setattr(
+        CloudAnalyzer, "analyze_image", lambda self, pfad, **kw: _fake_ergebnis()
+    )
+
+    code = cli.main(
+        ["--config", str(bild_konfig_datei), "bild", "--neu", "--behalten"]
+    )
+
+    assert code == 0
+    assert aufnahme.is_file()
+
+
+def test_cli_bild_verbraucht_und_speichert(bild_konfig_datei, bild, monkeypatch):
+    """Vorschlag und Verbrauch landen in der Datenbank."""
+    from fokusradar.cli import main
+    from fokusradar.config import load_config
+    from fokusradar.storage.db import Database
+
+    monkeypatch.setattr(
+        CloudAnalyzer, "analyze_image", lambda self, pfad, **kw: _fake_ergebnis()
+    )
+    main(["--config", str(bild_konfig_datei), "bild", "--datei", str(bild)])
+
+    config = load_config(bild_konfig_datei)
+    with Database(config.database_path) as database:
+        (verbrauch,) = database.api_usage()
+        vorschlaege = database.suggestions()
+
+    assert verbrauch.kind == "bild"
+    assert verbrauch.input_tokens == 1500
+    assert [v.category for v in vorschlaege] == ["bild/fenster"]
+    assert [v.source for v in vorschlaege] == ["cloud"]
 
 
 def test_vorschlag_ergaenzt_statt_zu_ersetzen(database):

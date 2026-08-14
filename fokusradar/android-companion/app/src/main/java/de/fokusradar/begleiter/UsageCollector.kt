@@ -156,7 +156,7 @@ class UsageCollector(private val context: Context) {
     }
 
     /** Anzeigename einer App; unbekannt bleibt unbekannt. */
-    private fun beschriftung(paket: String): String? = try {
+    fun beschriftung(paket: String): String? = try {
         val verwaltung = context.packageManager
         verwaltung.getApplicationLabel(verwaltung.getApplicationInfo(paket, 0)).toString()
     } catch (fehlt: PackageManager.NameNotFoundException) {

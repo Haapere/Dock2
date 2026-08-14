@@ -80,6 +80,13 @@ class ScreenCaptureService : Service() {
         // in dieser Reihenfolge, sonst wird der Dienst sofort beendet.
         starteImVordergrund()
 
+        if (projektion != null) {
+            // Schon am Laufen. Ein zweiter Start würde eine zweite Projektion
+            // anlegen und den Takt verdoppeln — also einfach weitermachen.
+            Log.i(TAG, "Läuft bereits — zweiter Start wird übergangen")
+            return START_NOT_STICKY
+        }
+
         val ergebnisCode = intent?.getIntExtra(EXTRA_CODE, 0) ?: 0
         val daten: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent?.getParcelableExtra(EXTRA_DATEN, Intent::class.java)
@@ -94,10 +101,19 @@ class ScreenCaptureService : Service() {
         }
 
         val verwalter = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        projektion = verwalter.getMediaProjection(ergebnisCode, daten).also {
-            it.registerCallback(rueckzug, takt)
+        try {
+            projektion = verwalter.getMediaProjection(ergebnisCode, daten).also {
+                it.registerCallback(rueckzug, takt)
+            }
+            richteAufnahmeEin()
+        } catch (fehler: Exception) {
+            // Eine abgelaufene oder schon verbrauchte Freigabe darf den Dienst
+            // nicht abstürzen lassen — sie beendet ihn nur.
+            Log.w(TAG, "Freigabe nicht nutzbar", fehler)
+            einstellungen.lastResult = "Bildschirm-Aufnahme nicht gestartet: ${fehler.message}"
+            stopSelf()
+            return START_NOT_STICKY
         }
-        richteAufnahmeEin()
         takt.post(schleife)
         return START_NOT_STICKY
     }
@@ -143,35 +159,49 @@ class ScreenCaptureService : Service() {
     /** Der Takt: aufnehmen, senden, warten. */
     private val schleife = object : Runnable {
         override fun run() {
-            try {
-                nimmAufUndSende()
+            val wartezeit = try {
+                if (nimmAufUndSende()) einstellungen.screenIntervalMinutes * 60_000L
+                else NACHFASSEN
             } catch (fehler: Exception) {
                 Log.w(TAG, "Aufnahme fehlgeschlagen", fehler)
+                einstellungen.screenIntervalMinutes * 60_000L
             }
-            takt.postDelayed(this, einstellungen.screenIntervalMinutes * 60_000L)
+            takt.postDelayed(this, wartezeit)
         }
     }
 
-    private fun nimmAufUndSende() {
+    /**
+     * Eine Aufnahme machen und wegschicken.
+     *
+     * Rückgabe ``false`` heißt nur: es lag noch kein Bild bereit. Das ist gleich
+     * nach dem Start der Normalfall — dann wird kurz darauf noch einmal
+     * nachgefasst statt bis zum nächsten regulären Takt zu warten, der eine
+     * Stunde entfernt sein kann.
+     */
+    private fun nimmAufUndSende(): Boolean {
         val paket = sammler.currentForegroundPackage()
         if (paket != null && einstellungen.isBlocked(paket)) {
             // Gesperrte App im Vordergrund: gar nicht erst aufnehmen.
             Log.i(TAG, "Aufnahme ausgelassen (gesperrte App)")
-            return
+            return true
         }
 
-        val bild = leser?.acquireLatestImage() ?: return
+        val bild = leser?.acquireLatestImage() ?: return false
         val png = try {
             alsPng(bild)
         } finally {
             bild.close()
         }
-        if (png == null || !einstellungen.ready) return
+        if (png == null) return false
+        if (!einstellungen.ready) return true  // nicht eingerichtet, nichts zu tun
 
+        val name = paket?.let { sammler.beschriftung(it) }
         hintergrund.execute {
-            val antwort = SyncClient(einstellungen).sendScreen(png, paket ?: "unbekannt")
+            val antwort = SyncClient(einstellungen)
+                .sendScreen(png, paket ?: "unbekannt", name)
             einstellungen.lastResult = antwort.meldung()
         }
+        return true
     }
 
     /** Bild aus dem [ImageReader] in ein PNG wandeln, auf Maß gebracht. */
@@ -261,6 +291,9 @@ class ScreenCaptureService : Service() {
 
         /** Längste Kante der übertragenen Aufnahme in Pixeln. */
         private const val MAX_KANTE = 1280
+
+        /** Abstand, wenn noch kein Bild bereitlag (gleich nach dem Start). */
+        private const val NACHFASSEN = 5_000L
 
         const val AKTION_STOPP = "de.fokusradar.begleiter.STOPP"
         const val EXTRA_CODE = "ergebnis_code"

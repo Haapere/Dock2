@@ -87,20 +87,24 @@ def inspect_image(path: Path) -> ImageInfo:
             f"Format {path.suffix or '(ohne Endung)'} wird nicht unterstützt; "
             f"möglich sind {', '.join(sorted(MEDIA_TYPES))}"
         )
-    daten = path.read_bytes()
-    if not daten:
+    # Erst die Größe erfragen, dann lesen: eine versehentlich mitgegebene
+    # Riesendatei soll nicht zuerst im Arbeitsspeicher landen.
+    groesse = path.stat().st_size
+    if groesse == 0:
         raise ImageError(f"Die Datei {path} ist leer")
-    if len(daten) > MAX_IMAGE_BYTES:
+    if groesse > MAX_IMAGE_BYTES:
         raise ImageError(
-            f"Die Aufnahme ist {len(daten) / 1024 / 1024:.1f} MB groß; "
+            f"Die Aufnahme ist {groesse / 1024 / 1024:.1f} MB groß; "
             f"die API nimmt höchstens {MAX_IMAGE_BYTES // 1024 // 1024} MB je Bild. "
             "Kleiner speichern oder verkleinern."
         )
-    breite, hoehe = png_dimensions(daten)
+    with path.open("rb") as datei:
+        kopf = datei.read(24)  # für die PNG-Maße reichen die ersten 24 Bytes
+    breite, hoehe = png_dimensions(kopf)
     return ImageInfo(
         path=path,
         media_type=media_type,
-        size_bytes=len(daten),
+        size_bytes=groesse,
         width=breite,
         height=hoehe,
     )
@@ -123,15 +127,23 @@ def encode_image(info: ImageInfo) -> str:
     return base64.standard_b64encode(info.path.read_bytes()).decode("ascii")
 
 
-def build_image_content(info: ImageInfo, context: str | None = None) -> list[dict[str, Any]]:
-    """Inhalt der Nachricht: erst das Bild, dann die Frage."""
+def build_question(context: str | None = None) -> str:
+    """Der Text, der neben dem Bild hinausgeht.
+
+    Steht eigens hier, damit ``fokusradar bild --zeigen`` genau ihn zeigen kann
+    und nicht eine Nachbildung davon.
+    """
     frage = "Hier ist ein Bildschirmfoto meines Arbeitsplatzes."
     if context:
         frage += f"\nDazu bekannt: {context}"
-    frage += (
+    return frage + (
         "\n\nSieh dir an, wie hier gearbeitet wird, und gib mir konkrete "
         "Verbesserungsvorschläge zur Bedienung."
     )
+
+
+def build_image_content(info: ImageInfo, context: str | None = None) -> list[dict[str, Any]]:
+    """Inhalt der Nachricht: erst das Bild, dann die Frage."""
     return [
         {
             "type": "image",
@@ -141,7 +153,7 @@ def build_image_content(info: ImageInfo, context: str | None = None) -> list[dic
                 "data": encode_image(info),
             },
         },
-        {"type": "text", "text": frage},
+        {"type": "text", "text": build_question(context)},
     ]
 
 

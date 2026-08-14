@@ -8,6 +8,7 @@ Sync-Endpunkt des Dashboards samt Token-Schutz und der Befehl
 from __future__ import annotations
 
 import dataclasses
+import os
 from datetime import date, datetime, timezone
 
 import pytest
@@ -395,6 +396,10 @@ def test_cli_android_token_neu_schreibt_in_die_konfiguration(tmp_path, capsys):
     assert frisch.android.token
     assert frisch.android.token in ausgabe
     assert not frisch.android.ready  # aktiv bleibt aus, bis jemand es einschaltet
+
+    # In der Datei steht jetzt ein Geheimnis — sie gehört nur noch dem Benutzer.
+    if hasattr(os, "getuid"):  # unter Windows wirkungslos
+        assert datei.stat().st_mode & 0o077 == 0
 
 
 def test_token_schreiben_ohne_abschnitt(tmp_path):

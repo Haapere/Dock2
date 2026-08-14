@@ -11,6 +11,7 @@
     fokusradar screenshots      # erkannte Texte der Aufnahmen ansehen
     fokusradar verschluesseln   # Datenbank auf SQLCipher umstellen
     fokusradar cloud      # Vorschläge über die Claude-API holen
+    fokusradar bild       # einzelnes Bildschirmfoto ansehen lassen
     fokusradar kosten     # Verbrauch und Kosten der Cloud-Analyse
     fokusradar android    # Begleiter auf dem Handy einrichten und ansehen
     fokusradar dashboard  # lokale Weboberfläche starten
@@ -22,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import signal
+import stat
 import sys
 import threading
 from datetime import date
@@ -29,6 +31,7 @@ from pathlib import Path
 
 from fokusradar import __version__, timeutil
 from fokusradar.agent import Tracker
+from fokusradar.android import sync as android_sync
 from fokusradar.capture import create_screenshot_backend, create_window_backend
 from fokusradar.capture.screenshots import screenshot_filename
 from fokusradar.cloud import (
@@ -40,9 +43,8 @@ from fokusradar.cloud import (
     collect_ocr_snippets,
     format_usd,
     price_for,
+    vision,
 )
-from fokusradar.cloud import vision
-from fokusradar.android import sync as android_sync
 from fokusradar.config import (
     Config,
     ConfigError,
@@ -58,7 +60,6 @@ from fokusradar.processing.categories import (
     write_default_categories,
 )
 from fokusradar.processing.exclusions import (
-    PATTERN_TYPES,
     ExclusionError,
     ExclusionList,
     write_default_exclusions,
@@ -872,14 +873,32 @@ def _cmd_bild(args: argparse.Namespace, config: Config) -> int:
     aufnahme, frisch = _bild_waehlen(args, config)
     if aufnahme is None:
         return 1
+    try:
+        return _bild_analysieren(args, config, aufnahme, frisch)
+    finally:
+        # Eine Aufnahme, die dieser Aufruf selbst gemacht hat, gehört auch ihm:
+        # sie verschwindet wieder, egal wie der Aufruf ausgeht. Alles andere —
+        # eine mitgegebene Datei, eine Aufnahme der Erfassung — bleibt liegen.
+        if frisch and not args.behalten and aufnahme.is_file():
+            try:
+                aufnahme.unlink()
+                print(f"Aufnahme gelöscht: {aufnahme}")
+            except OSError as exc:  # pragma: no cover - Datei ist schon weg o. Ä.
+                print(f"Aufnahme ließ sich nicht löschen: {exc}", file=sys.stderr)
 
+
+def _bild_analysieren(
+    args: argparse.Namespace, config: Config, aufnahme: Path, frisch: bool
+) -> int:
     try:
         info = vision.inspect_image(aufnahme)
     except vision.ImageError as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
-    kontext = _bild_kontext(config)
+    # Was gerade im Vordergrund ist, sagt nur über eine gerade gemachte Aufnahme
+    # etwas aus. Bei einer älteren oder mitgegebenen Datei wäre es geraten.
+    kontext = _bild_kontext() if frisch else None
     tarif = price_for(config.cloud.model)
     schaetzung = ""
     if tarif is not None:
@@ -893,11 +912,12 @@ def _cmd_bild(args: argparse.Namespace, config: Config) -> int:
     print(f"Modell:    {config.cloud.model}")
 
     if args.zeigen:
-        print(
-            "\nDas ginge hinaus: das Bild oben — vollständig, so wie es ist — "
-            "und der Kontextsatz.\nDer Auftrag an das Modell:\n"
-        )
+        print("\nHinaus ginge das Bild oben — vollständig, so wie es ist — und:")
+        print("\n  --- Auftrag an das Modell ---")
         for zeile in vision.VISION_SYSTEM_PROMPT.splitlines():
+            print(f"  {zeile}")
+        print("\n  --- Nachricht neben dem Bild ---")
+        for zeile in vision.build_question(kontext).splitlines():
             print(f"  {zeile}")
         print("\nGesendet wurde nichts (--zeigen).")
         return 0
@@ -941,13 +961,6 @@ def _cmd_bild(args: argparse.Namespace, config: Config) -> int:
         if ergebnis.suggestions:
             for text, kategorie in ergebnis.suggestions:
                 database.add_suggestion(heute, "cloud", text, f"bild/{kategorie}")
-
-    if not args.behalten and (frisch or not config.screenshots.enabled):
-        try:
-            info.path.unlink()
-            print(f"Aufnahme gelöscht: {info.path}")
-        except OSError as exc:  # pragma: no cover - Datei ist schon weg o. Ä.
-            print(f"Aufnahme ließ sich nicht löschen: {exc}", file=sys.stderr)
 
     if ergebnis.refused:
         print("\nDas Modell hat die Antwort abgelehnt.")
@@ -1031,7 +1044,7 @@ def _bild_aufnehmen(config: Config) -> Path | None:
     bild = backend.capture(ziel)
     if bild is None:
         print(
-            "Aufnahme fehlgeschlagen — "
+            "Keine Aufnahme möglich — "
             f"{backend.unavailable_reason() or 'unbekannter Grund'}",
             file=sys.stderr,
         )
@@ -1039,8 +1052,12 @@ def _bild_aufnehmen(config: Config) -> Path | None:
     return bild
 
 
-def _bild_kontext(config: Config) -> str | None:
-    """Ein Satz zum aktiven Fenster — Prozessname, nie der Fenstertitel."""
+def _bild_kontext() -> str | None:
+    """Ein Satz zum aktiven Fenster — Prozessname, nie der Fenstertitel.
+
+    Der Fenstertitel bliebe hier bewusst draußen: er steht ohnehin im Bild,
+    aber er würde die Zusage brechen, dass nur Programmnamen mitgehen.
+    """
     fenster = create_window_backend()
     if not fenster.available():
         return None
@@ -1215,6 +1232,12 @@ def _token_schreiben(path: Path, token: str) -> Path:
     elif not gesetzt:
         ergebnis += ["", "[android]", "aktiv = false", f'token = "{token}"']
     path.write_text("\n".join(ergebnis) + "\n", encoding="utf-8")
+    # In der Datei steht jetzt ein Geheimnis — wie beim API-Schlüssel und beim
+    # Datenbank-Schlüssel gehört sie damit nur noch dem eigenen Benutzer.
+    try:  # unter Windows wirkungslos, dort schützt die Benutzer-ACL
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:  # pragma: no cover - z. B. exotische Dateisysteme
+        pass
     return path
 
 

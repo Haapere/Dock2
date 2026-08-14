@@ -9,7 +9,7 @@ Start über ``fokusradar dashboard``.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -478,6 +478,18 @@ def create_app(config: Config, categorizer: Categorizer | None = None):
                     "[screenshots] aktiv = true setzen."
                 ),
             )
+        # Erst die angekündigte Länge prüfen: eine übergroße Übertragung soll
+        # gar nicht erst vollständig in den Arbeitsspeicher gelesen werden.
+        angekuendigt = request.headers.get("content-length")
+        if angekuendigt and angekuendigt.isdigit():
+            if int(angekuendigt) > android_screen.MAX_IMAGE_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Höchstens {android_screen.MAX_IMAGE_BYTES // 1024 // 1024} MB "
+                        "je Aufnahme werden angenommen"
+                    ),
+                )
         rohdaten = await request.body()
         try:
             aufnahme = android_screen.parse_capture(

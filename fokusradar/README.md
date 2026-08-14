@@ -337,7 +337,7 @@ Vorschläge (2):
 
 Der Auftrag an das Modell verbietet ausdrücklich, **Inhalte wiederzugeben** — keine Namen, Beträge, Texte oder Codezeilen, auch nicht als Beispiel. Gesprochen wird nur über Programme, Fenster und Bedienschritte. Nachlesen lässt sich das in [`fokusradar/cloud/vision.py`](fokusradar/cloud/vision.py), vollständig ausgeben mit `fokusradar bild --zeigen`.
 
-Nach der Analyse wird die Aufnahme gelöscht, sofern sie eigens dafür entstanden ist (`--neu`) oder Screenshots ohnehin abgeschaltet sind; `--behalten` lässt sie liegen. Die Vorschläge landen als zusätzliche Cloud-Vorschläge des Tages im Dashboard, der Verbrauch als Art `bild` in `fokusradar kosten`.
+Gelöscht wird nur, was dieser Aufruf selbst aufgenommen hat (`--neu`) — dann aber zuverlässig, auch wenn der Aufruf unterwegs scheitert. Eine mit `--datei` mitgegebene Aufnahme und die Aufnahmen der Erfassung bleiben unangetastet; `--behalten` behält auch die frische. Die Vorschläge landen als zusätzliche Cloud-Vorschläge des Tages im Dashboard, der Verbrauch als Art `bild` in `fokusradar kosten`.
 
 Ein Bild kostet je nach Auflösung 1.500–4.800 Token — mit Sonnet 5 unter einem Cent. Der Aufruf lohnt sich trotzdem nicht im Minutentakt: dafür ist er nicht gedacht und wäre er auch nicht gebaut.
 
@@ -396,7 +396,7 @@ Optional und getrennt einzuschalten: die App kann in großen Abständen ein Bild
 Zwei Filter greifen, bevor irgendetwas gespeichert wird:
 
 * **auf dem Handy**, vor der Aufnahme: steht eine App aus der Sperrliste im Vordergrund, entsteht gar kein Bild. Vorbelegt sind Bank, Passwortspeicher und Messenger.
-* **auf dem Rechner**, vor dem Schreiben: passt der Paketname auf die Ausschlussliste, wird das Bild verworfen, ohne es anzusehen und ohne es auf die Platte zu legen. Die eingebaute Vorlage deckt `*bank*`, `*sparkasse*`, `*paypal*`, `*password*` und `*authenticator*` ab.
+* **auf dem Rechner**, vor dem Schreiben: passt die App auf die Ausschlussliste, wird das Bild verworfen, ohne es anzusehen und ohne es auf die Platte zu legen. Geprüft wird beides — Prozess-Muster gegen den Paketnamen (`de.meinebank.app`), Titel-Muster gegen den App-Namen (`Online-Banking`). Die eingebaute Vorlage deckt `*bank*`, `*sparkasse*`, `*paypal*`, `*password*` und `*authenticator*` ab.
 
 Ohne `[screenshots] aktiv = true` nimmt der Rechner gar nichts an (409): wer am Rechner keine Screenshots will, bekommt auch keine vom Handy untergeschoben. Solange aufgenommen wird, zeigt Android eine Benachrichtigung, über die sich das sofort beenden lässt — und die Freigabe erlischt mit jedem Neustart der App.
 

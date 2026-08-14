@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from fokusradar import timeutil
@@ -119,19 +118,21 @@ def store_capture(
     ziel.parent.mkdir(parents=True, exist_ok=True)
     ziel.write_bytes(capture.data)
 
-    text = None
-    if ocr_backend is not None:
-        text = clean_ocr_text(ocr_backend.text(ziel), einstellungen.text_max_length)
-
     geloescht = None
     pfad: str | None = str(ziel)
-    if einstellungen.delete_image:
-        try:
-            ziel.unlink()
-            geloescht = zeitpunkt
-            pfad = None
-        except OSError:  # pragma: no cover - Datei ist schon weg o. Ä.
-            pass
+    try:
+        text = None
+        if ocr_backend is not None:
+            text = clean_ocr_text(ocr_backend.text(ziel), einstellungen.text_max_length)
+    finally:
+        # Auch wenn die Texterkennung abbricht: das Bild bleibt nicht liegen.
+        if einstellungen.delete_image:
+            try:
+                ziel.unlink()
+                geloescht = zeitpunkt
+                pfad = None
+            except OSError:  # pragma: no cover - Datei ist schon weg o. Ä.
+                pass
 
     eintrag = database.record_screenshot(
         zeitpunkt,
