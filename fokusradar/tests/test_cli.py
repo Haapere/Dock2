@@ -257,8 +257,9 @@ def test_config_anlegen_erzeugt_auch_die_regeldatei(tmp_path, capsys):
 
     assert (tmp_path / "categories.yaml").is_file()
     assert (tmp_path / "exclusions.yaml").is_file()
-    assert "Kategorien:  angelegt" in ausgabe
-    assert "Ausschluss:  angelegt" in ausgabe
+    assert "Kategorien:    angelegt" in ausgabe
+    assert "Ausschluss:    angelegt" in ausgabe
+    assert (tmp_path / ".env").is_file()
 
     assert main(["--config", str(pfad), "config"]) == 0
     anzeige = capsys.readouterr().out
@@ -397,3 +398,90 @@ def test_falscher_schluessel_liefert_exitcode_3(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv(crypto.KEY_ENV_VAR, "falscher-schluessel")
     assert main(["--config", str(config_pfad), "status"]) == 3
     assert "Schlüssel" in capsys.readouterr().err
+
+
+def test_cloud_zeigen_sendet_nichts(db_pfad, capsys):
+    _tagesdaten(db_pfad)
+    assert main(["--db", str(db_pfad), "cloud", "--zeigen"]) == 0
+    ausgabe = capsys.readouterr().out
+
+    assert "würde an die Claude-API gehen" in ausgabe
+    assert "Gesendet wurde nichts." in ausgabe
+    # Die Nutzlast enthält Kennzahlen und Prozessnamen, aber keine Fenstertitel.
+    assert "code.exe" in ausgabe
+    assert "main.py" not in ausgabe
+    assert "YouTube" not in ausgabe
+
+
+def test_cloud_ohne_daten(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "cloud", "--zeigen"]) == 0
+    assert "keine Daten" in capsys.readouterr().out
+
+
+def test_cloud_abgeschaltet_liefert_exitcode_3(db_pfad, capsys):
+    _tagesdaten(db_pfad)
+    assert main(["--db", str(db_pfad), "cloud"]) == 3
+    fehler = capsys.readouterr().err
+    assert "nicht möglich" in fehler
+    assert "aktiv = true" in fehler
+
+
+def test_cloud_holt_vorschlaege(tmp_path, db_pfad, capsys, monkeypatch):
+    from tests.test_cloud import FakeClient, antwort
+
+    _tagesdaten(db_pfad)
+    config_pfad = tmp_path / "config.toml"
+    config_pfad.write_text("[cloud]\naktiv = true\n", encoding="utf-8")
+    client = FakeClient(antwort([("Blocke den Vormittag am Stück.", "fokus")]))
+    monkeypatch.setattr(
+        "fokusradar.cli.CloudAnalyzer",
+        lambda config, **kwargs: __import__(
+            "fokusradar.cloud", fromlist=["CloudAnalyzer"]
+        ).CloudAnalyzer(config, client=client),
+    )
+
+    code = main(["--config", str(config_pfad), "--db", str(db_pfad), "cloud"])
+    ausgabe = capsys.readouterr().out
+
+    assert code == 0
+    assert "Blocke den Vormittag" in ausgabe
+    assert "Verbrauch:" in ausgabe
+
+    with Database(db_pfad) as db:
+        tag = timeutil.parse_day("heute")
+        assert db.has_cloud_suggestions(tag)
+        assert db.api_usage()[0].kind == "taeglich"
+
+    # Ein zweiter Aufruf fragt nicht erneut, sondern zeigt das Vorhandene.
+    assert main(["--config", str(config_pfad), "--db", str(db_pfad), "cloud"]) == 0
+    zweite = capsys.readouterr().out
+    assert "liegen schon Cloud-Vorschläge vor" in zweite
+    assert len(client.messages.calls) == 1
+
+
+def test_kosten_zeigt_verbrauch(db_pfad, capsys):
+    from datetime import timezone
+
+    with Database(db_pfad) as db:
+        db.record_api_usage(
+            datetime.now(timezone.utc),
+            day=timeutil.parse_day("heute"),
+            kind="taeglich",
+            model="claude-sonnet-5",
+            input_tokens=1200,
+            output_tokens=300,
+            cost_usd=0.0054,
+        )
+
+    assert main(["--db", str(db_pfad), "kosten"]) == 0
+    ausgabe = capsys.readouterr().out
+    assert "Aufrufe gesamt:  1" in ausgabe
+    assert "claude-sonnet-5" in ausgabe
+    assert "Preise für" in ausgabe
+
+
+def test_kosten_ohne_aufrufe(db_pfad, capsys):
+    assert main(["--db", str(db_pfad), "kosten"]) == 0
+    ausgabe = capsys.readouterr().out
+    assert "noch keine Cloud-Analyse" in ausgabe
+    assert "aus" in ausgabe

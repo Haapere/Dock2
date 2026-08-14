@@ -19,6 +19,34 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+#: Wochentage für ``[cloud] woechentlich_am``.
+WEEKDAY_NAMES = {
+    "montag": 0,
+    "dienstag": 1,
+    "mittwoch": 2,
+    "donnerstag": 3,
+    "freitag": 4,
+    "samstag": 5,
+    "sonntag": 6,
+}
+
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
+
+def _parse_clock(value: str | None) -> tuple[int, int] | None:
+    """``"18:00"`` in (18, 0) wandeln; leer oder unlesbar ergibt ``None``."""
+    if not value or not value.strip():
+        return None
+    teile = value.strip().split(":")
+    try:
+        stunde = int(teile[0])
+        minute = int(teile[1]) if len(teile) > 1 else 0
+    except ValueError:
+        return None
+    if not (0 <= stunde <= 23 and 0 <= minute <= 59):
+        return None
+    return stunde, minute
+
 DEFAULT_CONFIG_TEMPLATE = """\
 # FokusRadar — Konfiguration
 # Alle Werte sind optional; fehlende Einträge nutzen die Vorgabe.
@@ -82,6 +110,30 @@ kategorien_datei = ""
 # Adresse der lokalen Weboberfläche (fokusradar dashboard)
 host = "127.0.0.1"
 port = 8760
+
+[cloud]
+# Standardmäßig aus. Erst dann baut FokusRadar überhaupt eine Verbindung auf.
+# Hinaus geht nur die verdichtete Zusammenfassung — ansehen mit
+#   fokusradar cloud --zeigen
+aktiv = false
+# claude-sonnet-5 (Vorgabe), claude-opus-5 oder claude-haiku-4-5
+modell = "claude-sonnet-5"
+# Denk-Aufwand: low, medium, high, xhigh, max (bei Haiku 4.5 ohne Wirkung)
+aufwand = "medium"
+# Obergrenze der Antwortlänge in Token
+max_tokens = 2000
+# Abbruch nach so vielen Sekunden ohne Antwort
+timeout_sekunden = 120
+# Uhrzeit, ab der die Erfassung selbst den Tag auswerten lässt; leer = nur manuell
+taeglich_ab = "18:00"
+# Wochentag für den Wochenrückblick (montag ... sonntag); leer = kein Rückblick
+woechentlich_am = "sonntag"
+# Text aus der lokalen Texterkennung mitsenden. Aus gutem Grund aus:
+# OCR-Text kann alles enthalten, was auf dem Bildschirm stand.
+ocr_mitsenden = false
+# Eigene Preise je Million Token (überschreibt die eingebaute Tabelle)
+preis_input = 0
+preis_output = 0
 """
 
 
@@ -140,6 +192,48 @@ class StorageConfig:
 
 
 @dataclass(frozen=True)
+class CloudConfig:
+    """Einstellungen der Cloud-Analyse über die Claude-API (Phase 4)."""
+
+    enabled: bool = False
+    model: str = "claude-sonnet-5"
+    effort: str = "medium"
+    max_tokens: int = 2000
+    timeout_seconds: float = 120.0
+    daily_after: str | None = "18:00"
+    weekly_on: str | None = "sonntag"
+    send_ocr: bool = False
+    #: Eigener Tarif in US-Dollar je Million Token; 0 = eingebaute Preistabelle.
+    price_input: float = 0.0
+    price_output: float = 0.0
+
+    @property
+    def price(self):
+        """Eigener Tarif als ``ModelPrice`` — oder ``None`` für die Tabelle.
+
+        Der Import steht bewusst in der Funktion: ``fokusradar.cloud`` zieht
+        seinerseits die Konfiguration, ein Import auf Modulebene wäre ein Zirkel.
+        """
+        if self.price_input <= 0 and self.price_output <= 0:
+            return None
+        from fokusradar.cloud.costs import ModelPrice
+
+        return ModelPrice(self.price_input, self.price_output, "eigener Tarif")
+
+    @property
+    def daily_after_hour(self) -> tuple[int, int] | None:
+        """``taeglich_ab`` als (Stunde, Minute) oder ``None``."""
+        return _parse_clock(self.daily_after)
+
+    @property
+    def weekly_weekday(self) -> int | None:
+        """``woechentlich_am`` als Wochentagsnummer (Montag = 0) oder ``None``."""
+        if not self.weekly_on:
+            return None
+        return WEEKDAY_NAMES.get(self.weekly_on.strip().lower())
+
+
+@dataclass(frozen=True)
 class DashboardConfig:
     """Einstellungen der lokalen Weboberfläche (Phase 2)."""
 
@@ -155,6 +249,7 @@ class Config:
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
     screenshots: ScreenshotConfig = field(default_factory=ScreenshotConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    cloud: CloudConfig = field(default_factory=CloudConfig)
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     database_path: Path = field(default_factory=lambda: default_database_path())
     source: Path | None = None
@@ -182,6 +277,11 @@ class Config:
         if self.screenshots.directory is not None:
             return self.screenshots.directory
         return self.database_path.parent / "screenshots"
+
+    @property
+    def env_path(self) -> Path:
+        """Datei mit dem API-Schlüssel (``.env`` neben der Konfiguration)."""
+        return self.config_dir / ".env"
 
     @property
     def key_file(self) -> Path:
@@ -268,6 +368,16 @@ def _string_list(section: dict[str, Any], key: str, fallback: tuple[str, ...]) -
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
         raise ConfigError(f"'{key}' muss eine Liste von Texten sein, gefunden: {value!r}")
     return tuple(item.strip() for item in value if item.strip())
+
+
+def _optional_price(section: dict[str, Any], key: str) -> float:
+    """Preisangabe lesen; 0 bedeutet „eingebaute Tabelle benutzen"."""
+    value = section.get(key, 0)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ConfigError(f"'{key}' muss eine Zahl sein, gefunden: {value!r}")
+    if value < 0:
+        raise ConfigError(f"'{key}' darf nicht negativ sein, gefunden: {value!r}")
+    return float(value)
 
 
 def _optional_path(section: dict[str, Any], key: str) -> Path | None:
@@ -392,6 +502,43 @@ def load_config(path: Path | None = None) -> Config:
         ),
     )
 
+    cloud_section = raw.get("cloud", {})
+    if not isinstance(cloud_section, dict):
+        raise ConfigError("Abschnitt [cloud] muss eine Tabelle sein")
+    modell = cloud_section.get("modell", "claude-sonnet-5")
+    if not isinstance(modell, str) or not modell.strip():
+        raise ConfigError(f"'modell' muss ein Modellname als Text sein, gefunden: {modell!r}")
+    aufwand = cloud_section.get("aufwand", "medium")
+    if not isinstance(aufwand, str) or aufwand.strip().lower() not in EFFORT_LEVELS:
+        raise ConfigError(
+            f"'aufwand' muss {', '.join(EFFORT_LEVELS)} sein, gefunden: {aufwand!r}"
+        )
+    taeglich = cloud_section.get("taeglich_ab", "18:00")
+    if not isinstance(taeglich, str):
+        raise ConfigError("'taeglich_ab' muss eine Uhrzeit als Text sein, z. B. \"18:00\"")
+    if taeglich.strip() and _parse_clock(taeglich) is None:
+        raise ConfigError(f"'taeglich_ab' ist keine gültige Uhrzeit: {taeglich!r}")
+    woechentlich = cloud_section.get("woechentlich_am", "sonntag")
+    if not isinstance(woechentlich, str):
+        raise ConfigError("'woechentlich_am' muss ein Wochentag als Text sein")
+    if woechentlich.strip() and woechentlich.strip().lower() not in WEEKDAY_NAMES:
+        raise ConfigError(
+            f"'woechentlich_am' muss ein Wochentag sein ({', '.join(WEEKDAY_NAMES)}), "
+            f"gefunden: {woechentlich!r}"
+        )
+    cloud = CloudConfig(
+        enabled=_boolean(cloud_section, "aktiv", False),
+        model=modell.strip(),
+        effort=aufwand.strip().lower(),
+        max_tokens=int(_positive_number(cloud_section, "max_tokens", 2000.0)),
+        timeout_seconds=_positive_number(cloud_section, "timeout_sekunden", 120.0),
+        daily_after=taeglich.strip() or None,
+        weekly_on=woechentlich.strip().lower() or None,
+        send_ocr=_boolean(cloud_section, "ocr_mitsenden", False),
+        price_input=_optional_price(cloud_section, "preis_input"),
+        price_output=_optional_price(cloud_section, "preis_output"),
+    )
+
     dashboard_section = raw.get("dashboard", {})
     if not isinstance(dashboard_section, dict):
         raise ConfigError("Abschnitt [dashboard] muss eine Tabelle sein")
@@ -408,6 +555,7 @@ def load_config(path: Path | None = None) -> Config:
         analysis=analysis,
         screenshots=screenshots,
         storage=storage,
+        cloud=cloud,
         dashboard=dashboard,
         database_path=database_path,
         source=config_path,

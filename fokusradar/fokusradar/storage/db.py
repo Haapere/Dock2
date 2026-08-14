@@ -87,6 +87,22 @@ class ScreenshotRecord:
 
 
 @dataclass(frozen=True)
+class ApiUsage:
+    """Ein Aufruf der Claude-API mit Verbrauch und geschätzten Kosten."""
+
+    id: int
+    timestamp: datetime
+    date: date
+    kind: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: float
+
+
+@dataclass(frozen=True)
 class AppTotal:
     """Aufsummierte Nutzung eines Programms in einem Zeitraum."""
 
@@ -360,6 +376,7 @@ class Database:
             "daily_summaries",
             "suggestions",
             "exclusion_list",
+            "api_usage",
         ]
         return {
             table: int(
@@ -588,6 +605,126 @@ class Database:
             )
             for row in self.connection.execute(query, params)
         ]
+
+    # -- Cloud-Verbrauch (Phase 4) ------------------------------------------
+
+    def record_api_usage(
+        self,
+        at: datetime,
+        *,
+        day: date,
+        kind: str,
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
+        cost_usd: float = 0.0,
+    ) -> int:
+        """Einen API-Aufruf mit Verbrauch und Kosten festhalten."""
+        cursor = self.connection.execute(
+            """
+            INSERT INTO api_usage
+                   (timestamp, date, kind, model, input_tokens, output_tokens,
+                    cache_read_tokens, cache_write_tokens, cost_usd)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                timeutil.isoformat(at),
+                day.isoformat(),
+                kind,
+                model,
+                int(input_tokens),
+                int(output_tokens),
+                int(cache_read_tokens),
+                int(cache_write_tokens),
+                float(cost_usd),
+            ),
+        )
+        return int(cursor.lastrowid)
+
+    def api_usage(self, *, limit: int | None = None, since: date | None = None) -> list[ApiUsage]:
+        """Aufrufe der Claude-API, neueste zuerst."""
+        query = "SELECT * FROM api_usage"
+        params: list[object] = []
+        if since is not None:
+            query += " WHERE date >= ?"
+            params.append(since.isoformat())
+        query += " ORDER BY timestamp DESC, id DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        return [
+            ApiUsage(
+                id=row["id"],
+                timestamp=timeutil.parse(row["timestamp"]),
+                date=date.fromisoformat(row["date"]),
+                kind=row["kind"],
+                model=row["model"],
+                input_tokens=row["input_tokens"],
+                output_tokens=row["output_tokens"],
+                cache_read_tokens=row["cache_read_tokens"],
+                cache_write_tokens=row["cache_write_tokens"],
+                cost_usd=row["cost_usd"],
+            )
+            for row in self.connection.execute(query, params)
+        ]
+
+    def api_cost_summary(self, *, since: date | None = None) -> dict[str, object]:
+        """Summen über alle Aufrufe: Anzahl, Token, Kosten, Zeitraum."""
+        query = (
+            "SELECT COUNT(*) AS aufrufe,"
+            " COALESCE(SUM(input_tokens), 0) AS input_tokens,"
+            " COALESCE(SUM(output_tokens), 0) AS output_tokens,"
+            " COALESCE(SUM(cost_usd), 0) AS kosten,"
+            " MIN(date) AS von, MAX(date) AS bis"
+            " FROM api_usage"
+        )
+        params: list[object] = []
+        if since is not None:
+            query += " WHERE date >= ?"
+            params.append(since.isoformat())
+        row = self.connection.execute(query, params).fetchone()
+        return {
+            "aufrufe": int(row["aufrufe"]),
+            "input_tokens": int(row["input_tokens"]),
+            "output_tokens": int(row["output_tokens"]),
+            "kosten_usd": float(row["kosten"]),
+            "von": date.fromisoformat(row["von"]) if row["von"] else None,
+            "bis": date.fromisoformat(row["bis"]) if row["bis"] else None,
+        }
+
+    def has_cloud_suggestions(self, day: date) -> bool:
+        """Gibt es für diesen Tag schon Cloud-Vorschläge?"""
+        row = self.connection.execute(
+            "SELECT 1 FROM suggestions WHERE date = ? AND source = 'cloud' LIMIT 1",
+            (day.isoformat(),),
+        ).fetchone()
+        return row is not None
+
+    def last_api_call(self, kind: str | None = None) -> ApiUsage | None:
+        """Letzter Aufruf, optional nach Art (``taeglich``/``woche``) gefiltert."""
+        query = "SELECT * FROM api_usage"
+        params: list[object] = []
+        if kind is not None:
+            query += " WHERE kind = ?"
+            params.append(kind)
+        query += " ORDER BY timestamp DESC, id DESC LIMIT 1"
+        row = self.connection.execute(query, params).fetchone()
+        if row is None:
+            return None
+        return ApiUsage(
+            id=row["id"],
+            timestamp=timeutil.parse(row["timestamp"]),
+            date=date.fromisoformat(row["date"]),
+            kind=row["kind"],
+            model=row["model"],
+            input_tokens=row["input_tokens"],
+            output_tokens=row["output_tokens"],
+            cache_read_tokens=row["cache_read_tokens"],
+            cache_write_tokens=row["cache_write_tokens"],
+            cost_usd=row["cost_usd"],
+        )
 
     def tracked_days(self) -> list[date]:
         """Alle lokalen Kalendertage mit Daten, neueste zuerst."""

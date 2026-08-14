@@ -2,10 +2,20 @@
 
 from fokusradar.storage.db import (
     ActivitySample,
+    ApiUsage,
     AppTotal,
     Database,
+    ScreenshotRecord,
     Suggestion,
     WindowEvent,
 )
 
-__all__ = ["ActivitySample", "AppTotal", "Database", "Suggestion", "WindowEvent"]
+__all__ = [
+    "ActivitySample",
+    "ApiUsage",
+    "AppTotal",
+    "Database",
+    "ScreenshotRecord",
+    "Suggestion",
+    "WindowEvent",
+]

@@ -2,7 +2,7 @@
 
 Ein Aktivitäts-Monitor für den eigenen Rechner: Er erfasst im Hintergrund, **welches Programm gerade aktiv ist** und **wie viel wirklich gearbeitet wird**, speichert das ausschließlich lokal — und leitet daraus später konkrete Verbesserungsvorschläge zu Fokus und Bedienung ab.
 
-> **Stand: Phase 3 von 6.** Erfassung, Kategorisierung, lokale Auswertung mit Vorschlägen, Dashboard, Ausschlussliste, Screenshots mit lokaler OCR und die verschlüsselte Datenbank stehen. Cloud-Analyse und der Android-Begleiter folgen (siehe [Fahrplan](#fahrplan)).
+> **Stand: Phase 4 von 6.** Erfassung, Kategorisierung, lokale Auswertung, Dashboard, Ausschlussliste, Screenshots mit lokaler OCR, verschlüsselte Datenbank und die Cloud-Analyse über die Claude-API stehen. Es fehlt nur noch der Android-Begleiter (siehe [Fahrplan](#fahrplan)).
 
 ## Was erfasst wird — und was nicht
 
@@ -15,7 +15,9 @@ Ein Aktivitäts-Monitor für den eigenen Rechner: Er erfasst im Hintergrund, **w
 | Anzahl der Eingaben pro Messpunkt (optional) | Bildschirminhalt, solange Screenshots aus sind (Vorgabe) |
 | Screenshot-Text, wenn eingeschaltet (Bild wird danach gelöscht) | — |
 
-Alle Daten liegen in **einer lokalen SQLite-Datei**, auf Wunsch mit SQLCipher verschlüsselt. Bis einschließlich Phase 3 gibt es keinerlei Netzwerkzugriff — keine Cloud, keine Telemetrie. Das Dashboard ist ein Server auf `localhost`, der nur die eigene Datenbank liest.
+Alle Daten liegen in **einer lokalen SQLite-Datei**, auf Wunsch mit SQLCipher verschlüsselt. Ohne `[cloud] aktiv = true` gibt es keinerlei Netzwerkzugriff — keine Telemetrie, keine Ausnahmen. Das Dashboard ist ein Server auf `localhost`, der nur die eigene Datenbank liest.
+
+Ist die Cloud-Analyse eingeschaltet, geht **ausschließlich die verdichtete Tages- bzw. Wochenzusammenfassung** an die Claude-API: Zahlen und Prozessnamen, keine Fenstertitel, keine Screenshots, keine Rohdaten. Was genau, zeigt [`fokusradar cloud --zeigen`](#cloud-analyse-über-die-claude-api) — vor dem ersten Aufruf.
 
 Drei Sperren greifen **vor** dem Speichern: die Ausschlussliste, die Smart Pause bei Videocalls und die Pausenerkennung. Was dort hängen bleibt, landet gar nicht erst in der Datenbank.
 
@@ -36,6 +38,7 @@ Optional:
 pip install -e ".[dashboard]"     # Weboberfläche (FastAPI, uvicorn, Jinja2)
 pip install -e ".[screenshots]"   # Screenshots und OCR (mss, pytesseract)
 pip install -e ".[krypto]"        # verschlüsselte Datenbank (SQLCipher)
+pip install -e ".[cloud]"         # Vorschläge über die Claude-API (anthropic)
 pip install -e ".[input]"         # zählt zusätzlich die Eingabe-Frequenz (pynput)
 pip install -e ".[dev]"           # Tests
 ```
@@ -72,6 +75,11 @@ fokusradar dashboard --browser
 fokusradar ausschluss liste
 fokusradar ausschluss hinzufuegen --prozess "keepass*.exe"
 fokusradar verschluesseln
+
+# 7. Cloud-Analyse: erst ansehen, was rausginge — dann fragen
+fokusradar cloud --zeigen
+fokusradar cloud
+fokusradar kosten
 ```
 
 Tagesangaben verstehen `heute`, `gestern`, `-3` (vor drei Tagen) und `2026-08-13`.
@@ -207,6 +215,84 @@ Danach in der Konfiguration `[speicher] verschluesselt = true` setzen. Für eine
 
 `fokusradar verschluesseln` legt die Klartext-Fassung als `*.unverschluesselt` daneben; die bitte nach der Kontrolle löschen. Und ohne Umschweife: **Wer die Schlüsseldatei verliert, verliert die Daten.** Es gibt keine Hintertür.
 
+## Cloud-Analyse über die Claude-API
+
+**Standardmäßig aus.** Ohne `[cloud] aktiv = true` baut FokusRadar keine Netzwerkverbindung auf. Ist sie an, schickt es die verdichtete Zusammenfassung eines Tages an die Claude-API und bekommt zwei bis drei konkrete Vorschläge zurück — zu Fokus und zu effizienterer Bedienung einzelner Programme.
+
+### Erst ansehen, dann senden
+
+```bash
+fokusradar cloud --zeigen          # zeigt die Nutzlast, sendet nichts
+fokusradar cloud --zeigen --woche  # dasselbe für den Wochenrückblick
+```
+
+Das ist kein Beiwerk, sondern der empfohlene erste Schritt: Die Ausgabe ist **exakt** das, was das Gerät verlassen würde. Zusammengestellt wird sie an genau einer Stelle im Code — [`fokusradar/cloud/prompts.py`](fokusradar/cloud/prompts.py).
+
+| Geht hinaus | Bleibt hier |
+|---|---|
+| Kennzahlen des Tages (Zeiten, Anteile, Wechsel pro Stunde) | Fenstertitel |
+| Minuten je Kategorie | Screenshots |
+| Top-Programme mit **Prozessnamen** und Aufrufzahl | die Datenbank, einzelne Fensterwechsel |
+| Fokus-Sessions als Uhrzeit und Dauer | alles von der Ausschlussliste Erfasste |
+| die lokalen Vorschläge als Kontext | OCR-Text — außer `ocr_mitsenden = true` |
+
+### Einrichten
+
+```bash
+pip install -e ".[cloud]"
+fokusradar config --anlegen        # legt auch eine .env-Vorlage an
+```
+
+Den Schlüssel (von [platform.claude.com](https://platform.claude.com/)) in die `.env` neben der Konfiguration eintragen oder als Umgebungsvariable setzen — die Umgebung hat Vorrang:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Dann `[cloud] aktiv = true` setzen. Die `.env` steht in `.gitignore` und wird mit Rechten 0600 angelegt; ein Schlüssel gehört weder ins Repository noch in die Datenbank.
+
+### Aufrufen
+
+```bash
+fokusradar cloud                   # heute
+fokusradar cloud --tag gestern
+fokusradar cloud --woche           # Wochenrückblick
+fokusradar cloud --erneut          # nochmal fragen, obwohl es schon Vorschläge gibt
+```
+
+Pro Tag wird nur einmal gefragt; die Vorschläge landen mit `source = 'cloud'` in der Datenbank und stehen im Dashboard neben den lokalen. Läuft die Erfassung durch, holt sie die Analyse ab `taeglich_ab` (Vorgabe 18:00) von selbst, plus einmal pro Woche den Rückblick am eingestellten Wochentag. Scheitert ein Aufruf, meldet der Tracker das und erfasst weiter — die Erfassung hängt nie an der Cloud.
+
+### Modell und Aufwand
+
+| Einstellung | Vorgabe | Bedeutung |
+|---|---|---|
+| `modell` | `claude-sonnet-5` | auch `claude-opus-5` (mehr Qualität) oder `claude-haiku-4-5` (günstiger) |
+| `aufwand` | `medium` | `low`…`max`; steuert, wie gründlich das Modell nachdenkt |
+| `max_tokens` | 2000 | Obergrenze der Antwortlänge |
+| `taeglich_ab` | `"18:00"` | Uhrzeit für die automatische Analyse; leer = nur manuell |
+| `woechentlich_am` | `"sonntag"` | Wochentag für den Rückblick; leer = keiner |
+| `ocr_mitsenden` | `false` | OCR-Text mitschicken — bewusst aus |
+
+Sonnet 5 als Vorgabe kommt aus dem Bauplan: gute Qualität für konkrete Workflow-Tipps bei vernachlässigbaren Kosten. Bei Haiku 4.5 lässt FokusRadar den Aufwand-Parameter automatisch weg, weil das Modell ihn nicht kennt.
+
+### Kosten
+
+```bash
+fokusradar kosten
+```
+
+Zeigt jeden Aufruf mit Token-Verbrauch und geschätzten Kosten, die Summe und eine Hochrechnung auf den Monat. Die Preistabelle steht in [`fokusradar/cloud/costs.py`](fokusradar/cloud/costs.py) (Stand 14.08.2026):
+
+| Modell | Eingabe | Ausgabe |
+|---|---|---|
+| Claude Haiku 4.5 | 1 $ / Mio. Token | 5 $ / Mio. Token |
+| Claude Sonnet 5 | 2 $ / Mio. Token | 10 $ / Mio. Token |
+| Claude Opus 5 | 5 $ / Mio. Token | 25 $ / Mio. Token |
+
+Ein Tagesaufruf liegt bei etwa 1.500-3.000 Token hinein und einigen hundert hinaus — mit Sonnet 5 also im Bereich **weniger Cent pro Monat**.
+
+Zwei Hinweise zu den Zahlen: Die 2 $/10 $ für Sonnet 5 sind ein **Einführungspreis bis 31.08.2026**, danach gelten 3 $/15 $ — der Bauplan rechnet noch mit dem Einführungspreis. Und die Beträge hier sind Schätzungen aus der Token-Zahl; maßgeblich ist die Abrechnung von Anthropic. Eigene Konditionen lassen sich über `preis_input`/`preis_output` hinterlegen.
+
 ## Konfiguration
 
 ```bash
@@ -233,6 +319,10 @@ Ohne Konfigurationsdatei gelten die Vorgabewerte — FokusRadar ist also sofort 
 | `verschluesselt` | `false` | Datenbank mit SQLCipher verschlüsseln |
 | `schluessel_datei` | leer | leer = `schluessel.key` neben der Datenbank |
 | `aktiv` (Screenshots) | `false` | Screenshots und OCR einschalten |
+| `aktiv` (Cloud) | `false` | Cloud-Analyse einschalten — davor geht nichts hinaus |
+| `modell` / `aufwand` | `claude-sonnet-5` / `medium` | Modell und Denk-Aufwand der Cloud-Analyse |
+| `taeglich_ab` / `woechentlich_am` | `"18:00"` / `"sonntag"` | wann die Erfassung selbst fragt |
+| `ocr_mitsenden` | `false` | OCR-Text an die Cloud mitsenden |
 | `host` / `port` | `127.0.0.1` / 8760 | Adresse des Dashboards |
 
 Speicherorte (überschreibbar per `--config`/`--db` oder den Umgebungsvariablen `FOKUSRADAR_CONFIG`/`FOKUSRADAR_DB`):
@@ -242,6 +332,7 @@ Speicherorte (überschreibbar per `--config`/`--db` oder den Umgebungsvariablen 
 | Konfiguration | `%APPDATA%\FokusRadar\config.toml` | `~/.config/fokusradar/config.toml` |
 | Regeldatei | `%APPDATA%\FokusRadar\categories.yaml` | `~/.config/fokusradar/categories.yaml` |
 | Ausschluss-Vorlage | `%APPDATA%\FokusRadar\exclusions.yaml` | `~/.config/fokusradar/exclusions.yaml` |
+| API-Schlüssel | `%APPDATA%\FokusRadar\.env` | `~/.config/fokusradar/.env` |
 | Datenbank | `%LOCALAPPDATA%\FokusRadar\fokusradar.db` | `~/.local/share/fokusradar/fokusradar.db` |
 
 ## Unterstützte Systeme
@@ -268,6 +359,7 @@ fokusradar/
 │   ├── capture/            # aktives Fenster, Idle-Zeit, Eingaben, Screenshots
 │   ├── processing/         # Kategorien, Ausschlussliste, Fokus-/Ablenkungsanalyse
 │   ├── storage/            # SQLite-Schema, Abfragen, Verschlüsselung
+│   ├── cloud/              # Claude-API: Nutzlast, Aufruf, Kosten
 │   └── dashboard/          # FastAPI-App + Jinja2-Templates
 ├── config/                 # Vorlagen: config, categories.yaml, exclusions.yaml
 └── tests/
@@ -277,7 +369,7 @@ Die Erfassung steckt hinter zwei schmalen Schnittstellen (`WindowBackend`, `Idle
 
 ### Datenmodell
 
-Das Schema folgt Abschnitt 6 des Bauplans und ist seit Phase 3 vollständig in Gebrauch: `window_events` und `activity_level` von der Erfassung, `daily_summaries` und `suggestions` von der Auswertung, `screenshots_meta` von der OCR-Kette und `exclusion_list` von der Ausschlussliste.
+Das Schema folgt Abschnitt 6 des Bauplans und ist vollständig in Gebrauch: `window_events` und `activity_level` von der Erfassung, `daily_summaries` und `suggestions` von der Auswertung, `screenshots_meta` von der OCR-Kette und `exclusion_list` von der Ausschlussliste. Dazu kommt `api_usage` (Phase 4) — ohne sie ließe sich das im Bauplan geforderte Kosten-Tracking nicht führen.
 
 Eine Ergänzung gibt es bei `window_events`: die Spalten `ended_at` und `duration_seconds`. FokusRadar schreibt **eine Zeile je zusammenhängender Fensternutzung** statt einer Zeile alle drei Sekunden. Das spart rund 99 % der Zeilen, macht die Fokus-Sessions aus Phase 2 zu einer einfachen Abfrage — und weil das Ende laufend fortgeschrieben wird, kostet ein Absturz höchstens ein Erfassungsintervall.
 
@@ -298,7 +390,7 @@ python -m pytest -q
 - [x] **Phase 1 — Basis-Tracking:** aktives Fenster, Idle-Erkennung, SQLite, CLI für die Rohdaten
 - [x] **Phase 2 — Kategorisierung & lokale Analyse:** `categories.yaml`, Ablenkungs-/Fokus-Erkennung, Tageszusammenfassung, erstes Dashboard
 - [x] **Phase 3 — Screenshots & OCR:** periodische Screenshots, lokale OCR, Ausschlussliste, Smart Pause, DB-Verschlüsselung
-- [ ] **Phase 4 — Cloud-Hybrid:** Claude-API-Anbindung für die Vorschläge, Prompt-Vorlagen, Kosten-Tracking
+- [x] **Phase 4 — Cloud-Hybrid:** Claude-API-Anbindung für die Vorschläge, Prompt-Vorlagen, Kosten-Tracking
 - [ ] **Phase 5 — Android-Begleiter:** App-Nutzungsstatistik via `UsageStatsManager`
 - [ ] **Phase 6 — optional:** Android-Screen-Monitoring, Vision-Analyse einzelner Screenshots
 

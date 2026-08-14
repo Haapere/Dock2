@@ -3,6 +3,9 @@
 Das Schema folgt Abschnitt 6 des Bauplans. Alle Tabellen späterer Phasen
 werden bereits angelegt, damit Phase 2-4 nur noch schreiben müssen.
 
+``api_usage`` (Phase 4) kommt gegenüber dem Bauplan hinzu: ohne sie ließe sich
+das dort geforderte Kosten-Tracking nicht führen.
+
 Zwei bewusste Ergänzungen gegenüber dem Bauplan bei ``window_events``:
 ``ended_at`` und ``duration_seconds``. Statt alle paar Sekunden eine Zeile zu
 schreiben, hält FokusRadar pro *zusammenhängender* Fensternutzung genau eine
@@ -14,7 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS window_events (
@@ -70,6 +73,22 @@ CREATE TABLE IF NOT EXISTS exclusion_list (        -- ab Phase 3
     pattern TEXT NOT NULL,
     pattern_type TEXT CHECK(pattern_type IN ('process','title'))
 );
+
+CREATE TABLE IF NOT EXISTS api_usage (             -- ab Phase 4
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME NOT NULL,
+    date DATE NOT NULL,                -- ausgewerteter Tag
+    kind TEXT NOT NULL,                -- 'taeglich' oder 'woche'
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_usage_timestamp
+    ON api_usage (timestamp);
 """
 
 

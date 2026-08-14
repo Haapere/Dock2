@@ -60,3 +60,27 @@ kategorien_datei = ""
 # Adresse der lokalen Weboberfläche (fokusradar dashboard)
 host = "127.0.0.1"
 port = 8760
+
+[cloud]
+# Standardmäßig aus. Erst dann baut FokusRadar überhaupt eine Verbindung auf.
+# Hinaus geht nur die verdichtete Zusammenfassung — ansehen mit
+#   fokusradar cloud --zeigen
+aktiv = false
+# claude-sonnet-5 (Vorgabe), claude-opus-5 oder claude-haiku-4-5
+modell = "claude-sonnet-5"
+# Denk-Aufwand: low, medium, high, xhigh, max (bei Haiku 4.5 ohne Wirkung)
+aufwand = "medium"
+# Obergrenze der Antwortlänge in Token
+max_tokens = 2000
+# Abbruch nach so vielen Sekunden ohne Antwort
+timeout_sekunden = 120
+# Uhrzeit, ab der die Erfassung selbst den Tag auswerten lässt; leer = nur manuell
+taeglich_ab = "18:00"
+# Wochentag für den Wochenrückblick (montag ... sonntag); leer = kein Rückblick
+woechentlich_am = "sonntag"
+# Text aus der lokalen Texterkennung mitsenden. Aus gutem Grund aus:
+# OCR-Text kann alles enthalten, was auf dem Bildschirm stand.
+ocr_mitsenden = false
+# Eigene Preise je Million Token (überschreibt die eingebaute Tabelle)
+preis_input = 0
+preis_output = 0

@@ -10,6 +10,8 @@
     fokusradar ausschluss # Ausschlussliste pflegen (was nie erfasst wird)
     fokusradar screenshots      # erkannte Texte der Aufnahmen ansehen
     fokusradar verschluesseln   # Datenbank auf SQLCipher umstellen
+    fokusradar cloud      # Vorschläge über die Claude-API holen
+    fokusradar kosten     # Verbrauch und Kosten der Cloud-Analyse
     fokusradar dashboard  # lokale Weboberfläche starten
     fokusradar config     # Konfiguration anzeigen oder anlegen
 """
@@ -17,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import signal
 import sys
 import threading
@@ -25,6 +28,16 @@ from pathlib import Path
 
 from fokusradar import __version__, timeutil
 from fokusradar.agent import Tracker
+from fokusradar.cloud import (
+    PRICE_DATE,
+    CloudAnalyzer,
+    CloudError,
+    build_day_payload,
+    build_week_payload,
+    collect_ocr_snippets,
+    format_usd,
+    price_for,
+)
 from fokusradar.config import Config, ConfigError, load_config, write_default_config
 from fokusradar.dashboard.app import DashboardUnavailable, run_dashboard
 from fokusradar.processing.analysis import analyze_day, last_days, store_analysis
@@ -166,6 +179,31 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     verschluesseln.set_defaults(func=_cmd_verschluesseln)
 
+    cloud = subparsers.add_parser(
+        "cloud", help="Vorschläge über die Claude-API holen (Hybrid-Analyse)"
+    )
+    cloud.add_argument("--tag", default="heute", metavar="TAG", help="Vorgabe: heute")
+    cloud.add_argument(
+        "--woche", action="store_true", help="Wochenrückblick statt Tagesanalyse"
+    )
+    cloud.add_argument(
+        "--zeigen",
+        action="store_true",
+        help="nur anzeigen, was gesendet würde — ohne Netzwerkzugriff",
+    )
+    cloud.add_argument(
+        "--erneut",
+        action="store_true",
+        help="auch dann fragen, wenn für den Tag schon Cloud-Vorschläge vorliegen",
+    )
+    cloud.set_defaults(func=_cmd_cloud)
+
+    kosten = subparsers.add_parser(
+        "kosten", help="Verbrauch und Kosten der Cloud-Analyse anzeigen"
+    )
+    kosten.add_argument("--anzahl", type=int, default=10, metavar="N", help="Vorgabe: 10")
+    kosten.set_defaults(func=_cmd_kosten)
+
     dashboard = subparsers.add_parser("dashboard", help="lokale Weboberfläche starten")
     dashboard.add_argument("--host", metavar="ADRESSE", help="Vorgabe: 127.0.0.1")
     dashboard.add_argument("--port", type=int, metavar="PORT", help="Vorgabe: 8760")
@@ -183,6 +221,26 @@ def _build_parser() -> argparse.ArgumentParser:
     config_cmd.set_defaults(func=_cmd_config)
 
     return parser
+
+
+def _write_env_template(path: Path) -> Path:
+    """Vorlage für den API-Schlüssel anlegen (Rechte 0600, kein Schlüssel drin)."""
+    path = Path(path).expanduser()
+    if path.exists():
+        raise FileExistsError(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# API-Schlüssel für die Cloud-Analyse (Phase 4).\n"
+        "# Schlüssel gibt es unter https://platform.claude.com/\n"
+        "# Diese Datei gehört NICHT ins Repository.\n"
+        "ANTHROPIC_API_KEY=\n",
+        encoding="utf-8",
+    )
+    try:
+        path.chmod(0o600)
+    except OSError:  # pragma: no cover - unter Windows wirkungslos
+        pass
+    return path
 
 
 def _open_database(config: Config) -> Database:
@@ -308,6 +366,19 @@ def _cmd_status(args: argparse.Namespace, config: Config) -> int:
         print("\nDatenbestand:")
         for table, count in database.table_counts().items():
             print(f"  {table:<18} {count:>8} Zeilen")
+
+        analyzer = CloudAnalyzer(config)
+        grund = analyzer.unavailable_reason()
+        print(
+            "\nCloud-Analyse:     "
+            + (f"bereit ({config.cloud.model})" if grund is None else f"aus — {grund}")
+        )
+        summe = database.api_cost_summary()
+        if summe["aufrufe"]:
+            print(
+                f"  {summe['aufrufe']} Aufrufe, geschätzt "
+                f"{format_usd(summe['kosten_usd'])} — Details: fokusradar kosten"
+            )
 
         liste = database.exclusions()
         print(
@@ -650,6 +721,145 @@ def _cmd_verschluesseln(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _cmd_cloud(args: argparse.Namespace, config: Config) -> int:
+    day = _parse_day(args.tag) or timeutil.parse_day("heute")
+    categorizer = Categorizer.load(config.categories_path)
+    analyzer = CloudAnalyzer(config)
+
+    with _open_database(config) as database:
+        if args.woche:
+            tage = last_days(day, 7)
+            analysen = [
+                analyze_day(database, categorizer, tag, config.analysis) for tag in tage
+            ]
+            if not any(a.has_data for a in analysen):
+                print("Für diese Woche liegen keine Daten vor.")
+                return 0
+            nutzlast = build_week_payload(analysen)
+            art = "woche"
+        else:
+            analyse = analyze_day(database, categorizer, day, config.analysis)
+            if not analyse.has_data:
+                print(f"Für {day.isoformat()} liegen keine Daten vor.")
+                return 0
+            store_analysis(database, analyse)
+            schnipsel = (
+                collect_ocr_snippets(database, day) if config.cloud.send_ocr else None
+            )
+            nutzlast = build_day_payload(analyse, ocr_snippets=schnipsel)
+            art = "taeglich"
+
+        if args.zeigen:
+            print("Das — und nur das — würde an die Claude-API gehen:\n")
+            print(json.dumps(nutzlast, ensure_ascii=False, indent=2))
+            print(f"\nModell: {config.cloud.model}")
+            if not config.cloud.send_ocr:
+                print("OCR-Text: wird nicht mitgesendet ([cloud] ocr_mitsenden = false)")
+            print("Gesendet wurde nichts.")
+            return 0
+
+        grund = analyzer.unavailable_reason()
+        if grund is not None:
+            print(f"Cloud-Analyse nicht möglich — {grund}", file=sys.stderr)
+            if not config.cloud.enabled:
+                print(
+                    "\nZum Einschalten in der Konfiguration [cloud] aktiv = true setzen.\n"
+                    "Vorher lohnt ein Blick auf 'fokusradar cloud --zeigen': "
+                    "das zeigt genau,\nwas das Gerät verlassen würde.",
+                    file=sys.stderr,
+                )
+            return 3
+
+        if not args.woche and not args.erneut and database.has_cloud_suggestions(day):
+            print(
+                f"Für {day.isoformat()} liegen schon Cloud-Vorschläge vor "
+                "(mit --erneut trotzdem fragen)."
+            )
+            for vorschlag in database.suggestions(day=day):
+                if vorschlag.source == "cloud":
+                    print(f"  • {vorschlag.text}")
+            return 0
+
+        print(f"Frage {config.cloud.model} …")
+        try:
+            if args.woche:
+                ergebnis = analyzer.analyze_week(analysen)
+            else:
+                ergebnis = analyzer.analyze_day(analyse, ocr_snippets=schnipsel)
+        except CloudError as exc:
+            print(str(exc), file=sys.stderr)
+            return 3
+
+        analyzer.store(database, day, ergebnis, kind=art)
+
+    if ergebnis.refused:
+        print(
+            "Die Anfrage wurde abgelehnt (stop_reason: refusal). Es wurden keine "
+            "Vorschläge erzeugt.",
+            file=sys.stderr,
+        )
+        return 4
+
+    if not ergebnis.suggestions:
+        print("Die Antwort enthielt keine verwertbaren Vorschläge.", file=sys.stderr)
+        return 4
+
+    print(f"\nVorschläge ({ergebnis.model})")
+    for text, kategorie in ergebnis.suggestions:
+        print(f"  • [{kategorie}] {text}")
+    print(
+        f"\nVerbrauch: {ergebnis.input_tokens} Token hinein, "
+        f"{ergebnis.output_tokens} hinaus — etwa {format_usd(ergebnis.cost_usd)}"
+    )
+    return 0
+
+
+def _cmd_kosten(args: argparse.Namespace, config: Config) -> int:
+    with _open_database(config) as database:
+        summe = database.api_cost_summary()
+        eintraege = database.api_usage(limit=args.anzahl)
+
+    if not eintraege:
+        print("Es gab noch keine Cloud-Analyse.")
+        print(f"Cloud-Analyse: {'an' if config.cloud.enabled else 'aus'}")
+        return 0
+
+    print(f"Aufrufe gesamt:  {summe['aufrufe']}")
+    print(f"Token hinein:    {summe['input_tokens']:,}".replace(",", "."))
+    print(f"Token hinaus:    {summe['output_tokens']:,}".replace(",", "."))
+    print(f"Kosten (geschätzt): {format_usd(summe['kosten_usd'])}")
+    if summe["von"] and summe["bis"]:
+        tage = (summe["bis"] - summe["von"]).days + 1
+        if tage > 1:
+            schnitt = summe["kosten_usd"] / tage * 30
+            print(
+                f"Zeitraum:        {summe['von'].isoformat()} bis "
+                f"{summe['bis'].isoformat()} ({tage} Tage)"
+            )
+            print(f"Hochgerechnet:   {format_usd(schnitt)} pro Monat")
+
+    print(f"\n{'Zeitpunkt':<20} {'Art':<10} {'Modell':<18} {'Token':>13} {'Kosten':>9}")
+    print("-" * 74)
+    for eintrag in reversed(eintraege):
+        zeitpunkt = timeutil.to_local(eintrag.timestamp).strftime("%Y-%m-%d %H:%M")
+        token = f"{eintrag.input_tokens}/{eintrag.output_tokens}"
+        print(
+            f"{zeitpunkt:<20} {eintrag.kind:<10} {_shorten(eintrag.model, 18):<18} "
+            f"{token:>13} {format_usd(eintrag.cost_usd):>9}"
+        )
+
+    tarif = price_for(config.cloud.model)
+    if tarif is not None:
+        hinweis = f" — {tarif.note}" if tarif.note else ""
+        print(
+            f"\nPreise für {config.cloud.model}: {tarif.input_per_mtok:g} $ / "
+            f"{tarif.output_per_mtok:g} $ je Mio. Token "
+            f"(Stand {PRICE_DATE.strftime('%d.%m.%Y')}){hinweis}"
+        )
+    print("Geschätzte Werte — maßgeblich ist die Abrechnung von Anthropic.")
+    return 0
+
+
 def _cmd_dashboard(args: argparse.Namespace, config: Config) -> int:
     try:
         run_dashboard(
@@ -672,12 +882,13 @@ def _cmd_config(args: argparse.Namespace, config: Config) -> int:
         for pfad, schreiber, name in (
             (written.parent / "categories.yaml", write_default_categories, "Kategorien"),
             (written.parent / "exclusions.yaml", write_default_exclusions, "Ausschluss"),
+            (written.parent / ".env", _write_env_template, "API-Schlüssel"),
         ):
             try:
                 schreiber(pfad)
-                print(f"{name + ':':<12} angelegt          {pfad}")
+                print(f"{name + ':':<14} angelegt          {pfad}")
             except FileExistsError:
-                print(f"{name + ':':<12} bleibt unverändert {pfad}")
+                print(f"{name + ':':<14} bleibt unverändert {pfad}")
         return 0
 
     print(f"Quelle:            {config.source or 'Vorgabewerte (keine Datei gefunden)'}")
@@ -698,6 +909,13 @@ def _cmd_config(args: argparse.Namespace, config: Config) -> int:
     print(f"Toleranz           {config.analysis.interruption_tolerance_seconds:g} s")
     print(f"Screenshots        {'an' if config.screenshots.enabled else 'aus'}")
     print(f"Verschlüsselung    {'an' if config.storage.encrypted else 'aus'}")
+    print(f"Cloud-Analyse      {'an' if config.cloud.enabled else 'aus'}")
+    if config.cloud.enabled:
+        print(f"  Modell           {config.cloud.model} (Aufwand {config.cloud.effort})")
+        print(f"  Täglich ab       {config.cloud.daily_after or '—'}")
+        print(f"  Wochenrückblick  {config.cloud.weekly_on or '—'}")
+        print(f"  OCR mitsenden    {config.cloud.send_ocr}")
+    print(f"API-Schlüssel      {config.env_path}")
     print(f"Dashboard          http://{config.dashboard.host}:{config.dashboard.port}/")
     if config.source is None:
         print("\nMit 'fokusradar config --anlegen' eine Konfigurationsdatei erzeugen.")

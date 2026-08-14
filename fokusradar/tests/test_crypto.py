@@ -80,7 +80,9 @@ def test_vorhandene_datenbank_laesst_sich_umstellen(tmp_path, monkeypatch):
     with Database(pfad, encrypted=True, key=schluessel) as db:
         assert db.window_events()[0].process_name == "code.exe"
         assert len(db.exclusions()) == 1
-        assert db.connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        from fokusradar.storage.schema import SCHEMA_VERSION
+
+        assert db.connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
     with pytest.raises(ValueError):
         crypto.encrypt_database(pfad, schluessel)  # schon verschlüsselt

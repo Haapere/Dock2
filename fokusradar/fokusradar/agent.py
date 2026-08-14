@@ -61,6 +61,7 @@ class TrackerStats:
     excluded: int = 0
     smart_pauses: int = 0
     screenshots: int = 0
+    cloud_calls: int = 0
 
 
 @dataclass
@@ -110,6 +111,7 @@ class Tracker:
         self._idle_since: datetime | None = None
         self._last_activity_sample: datetime | None = None
         self._last_screenshot: datetime | None = None
+        self._last_cloud_check: datetime | None = None
         self._counting_inputs = False
         self._blocked_reason: str | None = None
         self._pause_processes = {
@@ -152,6 +154,7 @@ class Tracker:
 
         self._maybe_sample_activity(moment, idle_seconds)
         self._maybe_take_screenshot(moment)
+        self._maybe_cloud_analysis(moment)
 
     def _handle_idle(self, now: datetime, idle_seconds: float) -> None:
         """Pause: laufende Nutzung rückwirkend beim letzten Input beenden."""
@@ -292,6 +295,101 @@ class Tracker:
             + (f"{len(text)} Zeichen Text erkannt" if text else "kein Text erkannt")
             + (", Bild gelöscht" if geloescht else "")
         )
+
+    def _maybe_cloud_analysis(self, now: datetime) -> None:
+        """Abends den Tag (und wöchentlich die Woche) auswerten lassen.
+
+        Der Aufruf dauert ein paar Sekunden und hält die Schleife so lange an —
+        das ist verschmerzbar, weil er höchstens einmal pro Tag vorkommt.
+        Fehler beenden die Erfassung nie: sie werden gemeldet, dann läuft es
+        weiter.
+        """
+        settings = self.config.cloud
+        if not settings.enabled:
+            return
+        # Nicht bei jedem Tick in die Datenbank greifen.
+        if (
+            self._last_cloud_check is not None
+            and (now - self._last_cloud_check).total_seconds() < 300
+        ):
+            return
+        self._last_cloud_check = now
+
+        ab = settings.daily_after_hour
+        if ab is None:
+            return
+        lokal = timeutil.to_local(now)
+        if (lokal.hour, lokal.minute) < ab:
+            return
+
+        heute = lokal.date()
+        analyzer = self._cloud_analyzer()
+        if analyzer is None:
+            return
+
+        if not self.db.has_cloud_suggestions(heute):
+            self._run_cloud(analyzer, heute, weekly=False)
+
+        wochentag = settings.weekly_weekday
+        if wochentag is not None and lokal.weekday() == wochentag:
+            letzter = self.db.last_api_call("woche")
+            if letzter is None or (heute - letzter.date).days >= 6:
+                self._run_cloud(analyzer, heute, weekly=True)
+
+    def _cloud_analyzer(self):
+        """Analyzer erzeugen — oder ``None``, wenn etwas fehlt."""
+        from fokusradar.cloud import CloudAnalyzer
+
+        analyzer = CloudAnalyzer(self.config)
+        grund = analyzer.unavailable_reason()
+        if grund is not None:
+            self._notify(f"Cloud-Analyse übersprungen — {grund}")
+            return None
+        return analyzer
+
+    def _run_cloud(self, analyzer, day, *, weekly: bool) -> None:
+        """Einen Cloud-Aufruf ausführen und das Ergebnis speichern."""
+        from fokusradar.cloud import CloudError, collect_ocr_snippets
+        from fokusradar.processing.analysis import analyze_day, last_days, store_analysis
+
+        try:
+            if weekly:
+                analysen = [
+                    analyze_day(self.db, self.categorizer, tag, self.config.analysis)
+                    for tag in last_days(day, 7)
+                ]
+                if not any(a.has_data for a in analysen):
+                    return
+                ergebnis = analyzer.analyze_week(analysen)
+                art = "woche"
+            else:
+                analyse = analyze_day(self.db, self.categorizer, day, self.config.analysis)
+                if not analyse.has_data:
+                    return
+                store_analysis(self.db, analyse)
+                schnipsel = (
+                    collect_ocr_snippets(self.db, day)
+                    if self.config.cloud.send_ocr
+                    else None
+                )
+                ergebnis = analyzer.analyze_day(analyse, ocr_snippets=schnipsel)
+                art = "taeglich"
+        except CloudError as exc:
+            self._notify(f"Cloud-Analyse fehlgeschlagen: {exc}")
+            return
+        except Exception as exc:  # pragma: no cover - die Erfassung hat Vorrang
+            self._notify(f"Cloud-Analyse abgebrochen: {exc}")
+            return
+
+        analyzer.store(self.db, day, ergebnis, kind=art)
+        self.stats.cloud_calls += 1
+        if ergebnis.refused:
+            self._notify("Cloud-Analyse: Anfrage wurde abgelehnt")
+        else:
+            self._notify(
+                f"Cloud-Analyse ({art}): {len(ergebnis.suggestions)} Vorschläge, "
+                f"etwa {ergebnis.cost_usd:.3f} $"
+            )
 
     # -- Dauerbetrieb -------------------------------------------------------
 
