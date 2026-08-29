@@ -78,3 +78,9 @@ Nach dem ersten Login wird die Browser-Session in `sessions/session.json` gespei
 - Menschliches Tipp-Verhalten
 - Pausen nach je N Swipes
 - `navigator.webdriver` deaktiviert
+
+---
+
+## Nebenprojekt: `surface-live/`
+
+Anleitung und Skripte, um ein portables Linux vom USB-Stick auf einem Microsoft Surface zu betreiben — unabhängig vom Rest dieses Repos. Siehe [surface-live/README.md](surface-live/README.md).
