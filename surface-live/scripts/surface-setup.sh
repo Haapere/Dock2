@@ -44,7 +44,7 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-need_root "$@"
+need_root
 detect_distro
 surface_identify
 

@@ -59,7 +59,30 @@ Xubuntu und Linux Mint liegen nicht auf releases.ubuntu.com — die ISOs dort di
 
 ---
 
-## 1.3 Stick A schreiben (Rufus)
+## 1.3 Stick A schreiben — automatisch
+
+PowerShell **als Administrator** öffnen:
+
+```powershell
+.\Watch-Stick.ps1
+```
+
+Das Skript merkt sich die bereits angesteckten Datenträger und wartet. Sobald du Stick A einsteckst:
+
+1. Modell, Größe und Laufwerksbuchstabe werden angezeigt,
+2. geprüft wird: hängt per USB, ist kein System- oder Startdatenträger, Größe zwischen 7 und 128 GB,
+3. nach deinem `JA` wird das ISO roh auf das Gerät geschrieben — derselbe Vorgang wie Rufus im DD-Modus.
+
+```powershell
+.\Watch-Stick.ps1 -Einmal          # nach dem ersten Stick beenden
+.\Watch-Stick.ps1 -Automatisch     # ohne Rückfrage (nur wenn NUR der Zielstick steckt)
+```
+
+Nach dem Schreiben fragt Windows unter Umständen, ob der Datenträger formatiert werden soll — **nicht formatieren**. Windows kann die Linux-Partitionen schlicht nicht lesen.
+
+Wenn du lieber selbst klickst, geht auch der Weg über Rufus:
+
+## 1.3b Stick A schreiben (Rufus)
 
 [Rufus](https://rufus.ie) herunterladen (die portable Variante reicht), starten:
 

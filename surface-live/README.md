@@ -29,15 +29,25 @@ Der Go 2 hat nur **einen** USB-C-Port. Deshalb wird auf dem Windows-PC gebaut (d
 
 ---
 
+## Zwei Wege
+
+Jeder Schritt geht von Hand oder automatisch. Automatisch heißt: Skript starten, Stick einstecken, warten.
+
+| | Von Hand | Automatisch |
+|---|---|---|
+| **Stick A** (Installer) | ISO laden, Rufus | `Watch-Stick.ps1` — erkennt den Stick beim Einstecken und schreibt das ISO |
+| **Stick B** (dein System) | Ubuntu-Installer durchklicken | `build-stick.sh --watch` — baut den Stick vollständig allein |
+
+Windows kann Stick B nicht erzeugen: dafür braucht es einen laufenden Linux-Kernel, ext4 und GRUB. `build-stick.sh` läuft deshalb in der Live-Sitzung von Stick A — dort ist es sogar sicherer als der Klick-Installer, weil es sich weigert, auf einen nicht-USB-Datenträger oder auf das laufende System zu schreiben.
+
 ## Ablauf
 
 | Schritt | Wo | Anleitung |
 |---|---|---|
 | 1. ISO laden, prüfen, Stick A schreiben | Windows-PC | [docs/01-vorbereitung-windows.md](docs/01-vorbereitung-windows.md) |
-| 2. Ubuntu auf Stick B installieren | Windows-PC, von Stick A gebootet | [docs/02-system-auf-stick-bauen.md](docs/02-system-auf-stick-bauen.md) |
-| 3. Stick portabel machen (`surface-setup.sh`) | im neuen System | [docs/02-system-auf-stick-bauen.md](docs/02-system-auf-stick-bauen.md#schritt-6) |
-| 4. Surface vom Stick booten | Surface Go 2 | [docs/03-surface-booten.md](docs/03-surface-booten.md) |
-| 5. Prüfen und feinschleifen | Surface Go 2 | [docs/04-surface-optimieren.md](docs/04-surface-optimieren.md) |
+| 2. Stick B bauen | Windows-PC, von Stick A gebootet | [docs/02-system-auf-stick-bauen.md](docs/02-system-auf-stick-bauen.md) |
+| 3. Surface vom Stick booten | Surface Go 2 | [docs/03-surface-booten.md](docs/03-surface-booten.md) |
+| 4. Prüfen und feinschleifen | Surface Go 2 | [docs/04-surface-optimieren.md](docs/04-surface-optimieren.md) |
 | Wenn etwas klemmt | | [docs/troubleshooting.md](docs/troubleshooting.md) |
 
 **Distribution: Ubuntu 26.04 LTS.** Von Microsoft signierter Bootloader (Secure Boot darf anbleiben), guter Touch-Support, Updates bis 2031. Wer es leichter mag: Xubuntu oder Linux Mint XFCE — dieselben Skripte laufen dort ebenfalls.
@@ -73,12 +83,14 @@ Der Go 2 braucht den `linux-surface`-Spezialkernel **nicht** — der Standard-Ke
 
 | Skript | Zweck |
 |---|---|
+| `scripts/build-stick.sh` | Baut Stick B komplett allein: partitionieren, System kopieren, Bootloader, Benutzer, Surface-Feinschliff. `--watch` wartet auf den eingesteckten Stick |
 | `scripts/surface-detect.sh` | Erkennt Modell und Generation, sagt was dieses Gerät braucht (`--json` für Weiterverarbeitung) |
 | `scripts/surface-setup.sh` | Das Hauptskript: macht den Stick auf fremden Geräten bootfähig, richtet zram und Schreibschutz-Tuning ein, optional den Surface-Kernel |
 | `scripts/surface-check.sh` | Prüft am laufenden System, was tatsächlich funktioniert — rein lesend |
 | `windows/Stick-vorbereiten.ps1` | Lädt das ISO auf dem Windows-PC und verifiziert die Prüfsumme |
+| `windows/Watch-Stick.ps1` | Wartet auf den eingesteckten Stick und schreibt das ISO roh darauf (wie Rufus im DD-Modus) |
 
-Alle Skripte kennen `--help`. `surface-setup.sh` kennt `--dry-run`: zeigt jede Änderung an, führt keine aus.
+Alle Skripte kennen `--help`. `surface-setup.sh` und `build-stick.sh` kennen `--dry-run`: zeigt jeden Schritt, führt keinen aus.
 
 ```bash
 ./tests/test-scripts.sh    # Selbsttest ohne Surface-Hardware
@@ -88,6 +100,8 @@ Alle Skripte kennen `--help`. `surface-setup.sh` kennt `--dry-run`: zeigt jede �
 
 ## Sicherheitsnetz
 
+* `build-stick.sh` bricht ab, wenn das Ziel **das laufende System trägt** — auch mit `--force`. Ohne `--force` lehnt es außerdem alles ab, was nicht per USB angeschlossen ist oder kleiner als 28 GB ist.
+* `Watch-Stick.ps1` schreibt nie auf System- oder Startdatenträger, nie auf etwas, das nicht per USB hängt, und nie auf Datenträger über 128 GB (Sicherheitsnetz gegen externe Festplatten).
 * `surface-setup.sh` weigert sich, auf einem **nicht-USB-Datenträger** zu arbeiten (verhindert, dass es versehentlich den Bootloader des Windows-PCs anfasst). Nur mit `--force` zu übergehen.
 * Jede geänderte Konfigurationsdatei bekommt vorher eine `.surface-live.bak`-Kopie.
 * Vor Schritt 2 wird der **BitLocker-Wiederherstellungsschlüssel** gesichert — siehe [docs/01](docs/01-vorbereitung-windows.md). Das kostet zwei Minuten und rettet im Zweifel den Windows-Zugang.

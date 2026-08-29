@@ -49,7 +49,7 @@ need_root() {
       warn "Kein root – im Dry-Run ist das in Ordnung, es wird nichts geschrieben."
       return 0
     fi
-    die "Bitte mit sudo starten: sudo $0 $*"
+    die "Bitte mit sudo starten: sudo $0 …"
   fi
 }
 

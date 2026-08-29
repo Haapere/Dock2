@@ -28,6 +28,40 @@ Im Ubuntu-Startmenü **„Try or Install Ubuntu"** wählen.
 
 ---
 
+## Schritt 2 — Bauen lassen (empfohlen)
+
+In der Live-Sitzung ein Terminal öffnen (`Strg+Alt+T`), das Repo holen und das Skript starten — **bevor** du Stick B einsteckst:
+
+```bash
+sudo apt install -y git
+git clone <URL-dieses-Repos> ~/dock2
+cd ~/dock2/surface-live/scripts
+sudo ./build-stick.sh --watch
+```
+
+Das Skript fragt nach Benutzername und Passwort, wartet dann auf den Stick. Sobald du ihn einsteckst, läuft alles allein durch:
+
+1. **Prüfen** — hängt per USB, mindestens 28 GB, trägt nicht das laufende System (das lässt sich auch mit `--force` nicht übergehen)
+2. **Partitionieren** — GPT mit 512 MB EFI und dem Rest als ext4
+3. **Kopieren** — das laufende Live-System mit `rsync` auf den Stick, 10 bis 20 Minuten
+4. **Aufräumen** — Live-Bestandteile (casper, Installer, Live-Benutzer, Autologin) entfernen, sonst startet der Stick wieder als Live-Sitzung
+5. **Bootloader** — `grub-install --removable`, also der Fallback-Pfad `EFI/BOOT/BOOTX64.EFI`, den auch fremde Geräte finden, ohne den NVRAM anzufassen
+6. **Feinschliff** — `surface-setup.sh` für zram, weniger Schreibzugriffe und die Bildschirmdrehung
+
+Vorher anschauen, was passieren würde:
+
+```bash
+./build-stick.sh --dry-run /dev/sdc
+```
+
+Danach weiter mit [Schritt 3: Surface booten](03-surface-booten.md). Der ganze Abschnitt »Der Weg von Hand« entfällt damit — das Skript erledigt ihn komplett.
+
+---
+
+# Der Weg von Hand
+
+Wenn du lieber den grafischen Installer benutzt:
+
 ## Schritt 2 — Zielplatte identifizieren
 
 Im Live-System ein Terminal öffnen (`Strg+Alt+T`) und schauen, welches Gerät Stick B ist:
