@@ -88,6 +88,7 @@ Der Go 2 braucht den `linux-surface`-Spezialkernel **nicht** — der Standard-Ke
 | `scripts/surface-detect.sh` | Erkennt Modell und Generation, sagt was dieses Gerät braucht (`--json` für Weiterverarbeitung) |
 | `scripts/surface-setup.sh` | Das Hauptskript: macht den Stick auf fremden Geräten bootfähig, richtet zram und Schreibschutz-Tuning ein, optional den Surface-Kernel |
 | `scripts/surface-check.sh` | Prüft am laufenden System, was tatsächlich funktioniert — rein lesend |
+| `windows/Start.ps1` | Einstieg per Einzeiler: holt die beiden Skripte auf den PC und startet sie |
 | `windows/Stick-vorbereiten.ps1` | Lädt das ISO auf dem Windows-PC und verifiziert die Prüfsumme |
 | `windows/Watch-Stick.ps1` | Wartet auf den eingesteckten Stick und schreibt das ISO roh darauf (wie Rufus im DD-Modus) |
 

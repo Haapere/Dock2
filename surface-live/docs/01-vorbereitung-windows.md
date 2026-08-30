@@ -6,28 +6,34 @@ Ziel: ein geprüftes Ubuntu-ISO und ein bootfähiger **Stick A**. Dauer: ~20 Min
 
 ## 1.0 Die Skripte auf den PC holen
 
-Ohne diesen Schritt findet PowerShell nichts — die Dateien liegen auf GitHub, nicht auf deinem Rechner.
-
-PowerShell **als Administrator** öffnen (Startmenü → PowerShell → Rechtsklick → *Als Administrator ausführen*) und diesen Block komplett hineinkopieren:
+Die Dateien liegen auf GitHub, nicht auf deinem Rechner. PowerShell **als Administrator** öffnen (Startmenü → PowerShell → Rechtsklick → *Als Administrator ausführen*) und **diese eine Zeile** eingeben:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
-$quelle = 'https://raw.githubusercontent.com/Haapere/Dock2/refs/heads/claude/linux-live-surface-7ugch0/surface-live/windows/'
-$ordner = "$env:USERPROFILE\surface-live"
-New-Item -ItemType Directory -Force $ordner | Out-Null
-Set-Location $ordner
-'Stick-vorbereiten.ps1','Watch-Stick.ps1' | ForEach-Object {
-  Invoke-WebRequest ($quelle + $_) -OutFile $_
-  Unblock-File $_
-}
-Get-ChildItem
+irm https://raw.githubusercontent.com/Haapere/Dock2/refs/heads/claude/linux-live-surface-7ugch0/surface-live/windows/Start.ps1 | iex
 ```
 
-Danach stehst du im richtigen Ordner (`C:\Users\<du>\surface-live`) und beide Dateien sind da. `Unblock-File` ist nötig, weil Windows heruntergeladene Skripte sonst blockiert.
+Das war's. Der Einzeiler legt `C:\Users\<du>\surface-live` an, lädt beide Skripte hinein, entfernt die Windows-Downloadsperre und fragt dann, was laufen soll:
 
-> **Typischer Fehler:** `Die Benennung ".\Stick-vorbereiten.ps1" wurde nicht erkannt` heißt immer, dass du im falschen Ordner stehst. Mit `Get-Location` prüfen, mit `Set-Location $env:USERPROFILE\surface-live` hingehen.
+```
+  1  ISO herunterladen und Checksumme vergleichen
+  2  Stick schreiben (wartet, bis du ihn einsteckst)
+  3  beides nacheinander
+  4  nichts - ich mache von Hand weiter
+```
 
-Alternativ das ganze Repo als ZIP: <https://github.com/Haapere/Dock2/archive/refs/heads/claude/linux-live-surface-7ugch0.zip> — entpacken, dann in den Ordner `surface-live\windows` wechseln.
+> **Beim Kopieren aufpassen:** Nur die Zeile selbst einfügen — nichts, was mit `PS C:\...>` anfängt, und keine `#`-Kommentare aus der Anleitung. Solche Zeilen sind Terminal-*Ausgabe*, keine Befehle; PowerShell versucht sie trotzdem auszuführen und meldet dann Dinge wie `Get-Process: A positional parameter cannot be found`.
+
+> **`irm … | iex`** lädt ein Skript aus dem Netz und führt es sofort aus. Bei deinem eigenen Repo ist das in Ordnung — bei fremden Quellen solltest du sowas nie blind ausführen.
+
+### Wenn du lieber selbst tippst
+
+```powershell
+cd "$env:USERPROFILE\surface-live"
+```
+
+Danach `.\Stick-vorbereiten.ps1` oder `.\Watch-Stick.ps1` starten. `„… wurde nicht erkannt"` heißt immer: falscher Ordner. `Get-Location` zeigt, wo du stehst, `Get-ChildItem` was da liegt.
+
+Alternativ das ganze Repo als ZIP: <https://github.com/Haapere/Dock2/archive/refs/heads/claude/linux-live-surface-7ugch0.zip> — entpacken, dann in `surface-live\windows` wechseln.
 
 ---
 
