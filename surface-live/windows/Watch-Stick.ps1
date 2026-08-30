@@ -62,6 +62,17 @@ if (-not $rolle.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   exit 1
 }
 
+# PowerShell 7 bringt die Storage-Cmdlets nicht immer von selbst mit.
+if (-not (Get-Command Get-Disk -ErrorAction SilentlyContinue)) {
+  try {
+    Import-Module Storage -SkipEditionCheck -ErrorAction Stop
+  } catch {
+    Fehler "Die Storage-Cmdlets (Get-Disk) fehlen in dieser PowerShell-Version."
+    Hinweis "Windows PowerShell 5.1 benutzen: Startmenü → 'Windows PowerShell' → Als Administrator ausführen."
+    exit 1
+  }
+}
+
 if (-not $Iso) {
   $kandidat = Get-ChildItem -Path (Join-Path $env:USERPROFILE "Downloads") `
                             -Filter "ubuntu-*-desktop-amd64.iso" -ErrorAction SilentlyContinue |

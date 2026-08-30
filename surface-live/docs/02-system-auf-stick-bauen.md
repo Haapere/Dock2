@@ -34,7 +34,7 @@ In der Live-Sitzung ein Terminal öffnen (`Strg+Alt+T`), das Repo holen und das 
 
 ```bash
 sudo apt install -y git
-git clone <URL-dieses-Repos> ~/dock2
+git clone -b claude/linux-live-surface-7ugch0 https://github.com/Haapere/Dock2.git ~/dock2
 cd ~/dock2/surface-live/scripts
 sudo ./build-stick.sh --watch
 ```
@@ -124,7 +124,7 @@ Repository holen und Skript ausführen:
 
 ```bash
 sudo apt install -y git
-git clone <URL-dieses-Repos> ~/dock2
+git clone -b claude/linux-live-surface-7ugch0 https://github.com/Haapere/Dock2.git ~/dock2
 cd ~/dock2/surface-live/scripts
 sudo ./surface-setup.sh
 ```

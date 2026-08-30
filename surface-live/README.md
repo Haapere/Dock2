@@ -44,6 +44,7 @@ Windows kann Stick B nicht erzeugen: dafür braucht es einen laufenden Linux-Ker
 
 | Schritt | Wo | Anleitung |
 |---|---|---|
+| 0. Skripte auf den PC holen | Windows-PC | [docs/01, Abschnitt 1.0](docs/01-vorbereitung-windows.md#10-die-skripte-auf-den-pc-holen) |
 | 1. ISO laden, prüfen, Stick A schreiben | Windows-PC | [docs/01-vorbereitung-windows.md](docs/01-vorbereitung-windows.md) |
 | 2. Stick B bauen | Windows-PC, von Stick A gebootet | [docs/02-system-auf-stick-bauen.md](docs/02-system-auf-stick-bauen.md) |
 | 3. Surface vom Stick booten | Surface Go 2 | [docs/03-surface-booten.md](docs/03-surface-booten.md) |

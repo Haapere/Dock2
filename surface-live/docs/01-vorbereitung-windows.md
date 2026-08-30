@@ -4,6 +4,33 @@ Ziel: ein geprüftes Ubuntu-ISO und ein bootfähiger **Stick A**. Dauer: ~20 Min
 
 ---
 
+## 1.0 Die Skripte auf den PC holen
+
+Ohne diesen Schritt findet PowerShell nichts — die Dateien liegen auf GitHub, nicht auf deinem Rechner.
+
+PowerShell **als Administrator** öffnen (Startmenü → PowerShell → Rechtsklick → *Als Administrator ausführen*) und diesen Block komplett hineinkopieren:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+$quelle = 'https://raw.githubusercontent.com/Haapere/Dock2/refs/heads/claude/linux-live-surface-7ugch0/surface-live/windows/'
+$ordner = "$env:USERPROFILE\surface-live"
+New-Item -ItemType Directory -Force $ordner | Out-Null
+Set-Location $ordner
+'Stick-vorbereiten.ps1','Watch-Stick.ps1' | ForEach-Object {
+  Invoke-WebRequest ($quelle + $_) -OutFile $_
+  Unblock-File $_
+}
+Get-ChildItem
+```
+
+Danach stehst du im richtigen Ordner (`C:\Users\<du>\surface-live`) und beide Dateien sind da. `Unblock-File` ist nötig, weil Windows heruntergeladene Skripte sonst blockiert.
+
+> **Typischer Fehler:** `Die Benennung ".\Stick-vorbereiten.ps1" wurde nicht erkannt` heißt immer, dass du im falschen Ordner stehst. Mit `Get-Location` prüfen, mit `Set-Location $env:USERPROFILE\surface-live` hingehen.
+
+Alternativ das ganze Repo als ZIP: <https://github.com/Haapere/Dock2/archive/refs/heads/claude/linux-live-surface-7ugch0.zip> — entpacken, dann in den Ordner `surface-live\windows` wechseln.
+
+---
+
 ## 1.1 BitLocker-Wiederherstellungsschlüssel sichern
 
 **Bevor du irgendetwas am Surface änderst.** Wenn Windows auf dem Surface verschlüsselt ist (bei Surface-Geräten Standard), kann eine geänderte Firmware-Einstellung dazu führen, dass Windows beim nächsten Start nach einem 48-stelligen Schlüssel fragt. Ohne den Schlüssel ist Windows verloren.
