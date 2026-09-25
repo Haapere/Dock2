@@ -69,7 +69,7 @@ param(
     [switch] $All,
     [switch] $List,
     [int]    $Max = 0,
-    [string] $MusicDir = (Join-Path $env:USERPROFILE 'Music\DJ-Sets'),
+    [string] $MusicDir,
     [switch] $DryRun
 )
 
@@ -84,6 +84,16 @@ function Write-Fail  { param([string]$m) Write-Host "    [fehl] $m" -ForegroundC
 $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir  = Split-Path $toolsDir -Parent
 $cfgFile  = Join-Path $rootDir 'config\dj-sources.json'
+
+<#
+    Bewusst $env:USERPROFILE\Music und nicht der Windows-Musikordner:
+    Bei aktivem OneDrive zeigt der Musikordner in die Cloud-Synchronisierung -
+    und Gigabytes an DJ-Sets gehoeren nicht dorthin.
+#>
+if (-not $MusicDir) {
+    $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
+    $MusicDir = Join-Path $homeDir 'Music\DJ-Sets'
+}
 $binDir   = Join-Path $env:LOCALAPPDATA 'KodiMediacenter\bin'
 $stateDir = Join-Path $env:LOCALAPPDATA 'KodiMediacenter'
 $archive  = Join-Path $stateDir 'dj-fetch-archive.txt'
@@ -104,16 +114,20 @@ function Find-Tool {
     return $null
 }
 
-$ytdlp = Find-Tool 'yt-dlp'
-if (-not $ytdlp) {
-    Write-Fail 'yt-dlp nicht gefunden.'
-    Write-Warn2 'Bitte zuerst ausfuehren:  .\scripts\07-setup-ytdlp.ps1'
-    return
-}
-
+# -List zeigt nur die Konfiguration an und braucht die Werkzeuge nicht -
+# deshalb erst pruefen, wenn tatsaechlich geladen werden soll.
+$ytdlp  = Find-Tool 'yt-dlp'
 $ffmpeg = Find-Tool 'ffmpeg'
-if (-not $ffmpeg) {
-    Write-Warn2 'ffmpeg nicht gefunden - Metadaten und Coverbilder werden nicht eingebettet.'
+
+if (-not $List) {
+    if (-not $ytdlp) {
+        Write-Fail 'yt-dlp nicht gefunden.'
+        Write-Warn2 'Bitte zuerst ausfuehren:  .\scripts\07-setup-ytdlp.ps1'
+        return
+    }
+    if (-not $ffmpeg) {
+        Write-Warn2 'ffmpeg nicht gefunden - Metadaten und Coverbilder werden nicht eingebettet.'
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -146,7 +160,9 @@ if (-not (Test-Path $stateDir)) { New-Item -ItemType Directory -Path $stateDir -
 # SoundCloud-Zugang
 # ---------------------------------------------------------------------------
 $scArgs = @()
-if (Test-Path $scFile) {
+if ($List) {
+    # im Listenmodus keine Anmeldemeldungen - sie verwirren nur
+} elseif (Test-Path $scFile) {
     try {
         $sc = Get-Content $scFile -Raw | ConvertFrom-Json
         if ($sc.method -eq 'oauth' -and $sc.token) {

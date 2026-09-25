@@ -177,7 +177,39 @@ T "PlayMedia-Befehl korrekt" ($first.InnerText -eq 'PlayMedia("https://stream.ra
 T "Sonderzeichen im Namen maskiert" ($fav.favourites.favourite[1].name -eq 'Test & Sonderzeichen <">')
 T "Kaufmanns-Und in URL maskiert" ($fav.favourites.favourite[1].InnerText -eq 'PlayMedia("https://example.com/s?a=1&b=2")') "ist '$($fav.favourites.favourite[1].InnerText)'"
 
-Write-Host "`n=== 7. Equalizer-APO-Syntax ===" -ForegroundColor Cyan
+Write-Host "`n=== 7. Zuweisungen an Automatikvariablen ===" -ForegroundColor Cyan
+<#
+    PowerShell schuetzt einige Automatikvariablen. Eine Zuweisung an $HOME
+    oder $Host bricht das Skript zur Laufzeit ab - die Syntaxpruefung sieht
+    das nicht. Deshalb hier per AST pruefen.
+#>
+$protectedVars = @('HOME','PID','PSHOME','true','false','Host','Error','ExecutionContext','ShellId','PSCulture','PSUICulture','PSVersionTable')
+$violations = @()
+
+foreach ($f in (Get-ChildItem -Path $root -Recurse -Include *.ps1, *.psm1)) {
+    $tokens = $null; $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errors)
+
+    $assignments = $ast.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst]
+    }, $true)
+
+    foreach ($a in $assignments) {
+        $left = $a.Left
+        # Auch $x = ... innerhalb von [type]$x = ... erfassen
+        if ($left -is [System.Management.Automation.Language.ConvertExpressionAst]) { $left = $left.Child }
+        if ($left -isnot [System.Management.Automation.Language.VariableExpressionAst]) { continue }
+
+        $name = $left.VariablePath.UserPath
+        if ($protectedVars -contains $name) {
+            $violations += "$($f.Name):$($a.Extent.StartLineNumber) -> `$$name"
+        }
+    }
+}
+
+T "keine Zuweisung an geschuetzte Variablen" ($violations.Count -eq 0) ($violations -join ' | ')
+
+Write-Host "`n=== 8. Equalizer-APO-Syntax ===" -ForegroundColor Cyan
 $filterRe = '^(Filter\s*\d*\s*:\s*(ON|OFF)\s+(PK|LP|HP|LPQ|HPQ|BP|LS|HS|LSC|HSC|NO|AP)\b.*|Preamp:\s*-?\d+(\.\d+)?\s*dB|Device:.*|Include:.*|Channel:.*|#.*|\s*)$'
 foreach ($f in Get-ChildItem "$root/dsp" -Filter '*.txt') {
     $lineNo = 0; $bad = @()

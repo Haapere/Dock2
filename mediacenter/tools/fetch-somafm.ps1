@@ -58,7 +58,7 @@ param(
     [string[]] $Genre = @('electronic', 'techno', 'house', 'downtempo', 'ambient', 'idm', 'dub', 'breaks', 'trance'),
     [switch]   $All,
     [switch]   $IncludeFlac,
-    [string]   $StrmDir = (Join-Path $env:USERPROFILE 'Music\Radio-Streams\SomaFM'),
+    [string]   $StrmDir,
     [switch]   $ListOnly
 )
 
@@ -69,6 +69,11 @@ function Write-Step  { param([string]$m) Write-Host "`n[*] $m" -ForegroundColor 
 function Write-Ok    { param([string]$m) Write-Host "    [ok]   $m" -ForegroundColor Green }
 function Write-Warn2 { param([string]$m) Write-Host "    [warn] $m" -ForegroundColor Yellow }
 function Write-Fail  { param([string]$m) Write-Host "    [fehl] $m" -ForegroundColor Red }
+
+if (-not $StrmDir) {
+    $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
+    $StrmDir = Join-Path $homeDir 'Music\Radio-Streams\SomaFM'
+}
 
 Write-Host ""
 Write-Host "=== SomaFM-Kanaele ===" -ForegroundColor White

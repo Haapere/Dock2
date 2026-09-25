@@ -59,6 +59,8 @@ Optional, aber für DJ-Sets der größte Hebel:
 |---|---|---|
 | + | `scripts\07-setup-ytdlp.ps1` | yt-dlp und ffmpeg einrichten, SoundCloud-Go+-Zugang hinterlegen |
 | + | `tools\dj-fetch.ps1` | Sets lokal holen statt streamen – siehe [docs/07-dj-sets.md](docs/07-dj-sets.md) |
+| + | `tools\sc-library.ps1` | SoundCloud-Bibliothek lesen, Geschmacksprofil bauen |
+| + | `tools\dj-suggest.ps1` | Daraus Quellen- und Download-Vorschläge ableiten |
 
 Jeder Schritt lässt sich einzeln ausführen und wiederholen. Vor jeder
 Änderung wird gesichert – Backups unter `%ProgramData%\KodiMediacenter\backup\`.
@@ -81,7 +83,9 @@ mediacenter/
 │   ├── switch-audio.ps1             HDMI ⇄ USB-DAC umschalten
 │   ├── test-streams.ps1             Stream-URLs prüfen
 │   ├── dj-fetch.ps1                 DJ-Sets lokal holen (yt-dlp)
-│   └── fetch-somafm.ps1             SomaFM-Kanäle live abrufen
+│   ├── fetch-somafm.ps1             SomaFM-Kanäle live abrufen
+│   ├── sc-library.ps1               SoundCloud-Bibliothek → Geschmacksprofil
+│   └── dj-suggest.ps1               Vorschläge: Quellen + legale Downloads
 ├── addons/
 │   ├── sources.json                 Add-on-Quellen und Direkt-Streams
 │   └── youtube-audio-hq.md          YouTube auf Opus/DASH trimmen
@@ -103,6 +107,7 @@ mediacenter/
 | [docs/05-equalizer-apo.md](docs/05-equalizer-apo.md) | Raummoden bändigen – und warum der Receiver das meist besser kann |
 | [docs/06-troubleshooting.md](docs/06-troubleshooting.md) | Fehlersuche nach Symptom |
 | [docs/07-dj-sets.md](docs/07-dj-sets.md) | DJ-Sets herunterladen statt streamen – warum das robuster ist |
+| [docs/08-vorschlaege.md](docs/08-vorschlaege.md) | Geschmacksprofil aus SoundCloud, legale Download-Vorschläge, Bandcamp |
 
 ---
 
@@ -164,6 +169,12 @@ powershell.exe -ExecutionPolicy Bypass -File "<Pfad>\tools\switch-audio.ps1" -Ta
 .\tools\dj-fetch.ps1 -List
 .\tools\dj-fetch.ps1 -Source "HOER"
 .\tools\dj-fetch.ps1 -Url "https://soundcloud.com/drumcode/..."
+```
+
+**Vorschläge aus der eigenen SoundCloud-Bibliothek:**
+```powershell
+.\tools\sc-library.ps1 -User "dein-name" -Deep
+.\tools\dj-suggest.ps1 -Interactive
 ```
 
 **SomaFM-Kanäle einbinden** (Kanalliste wird live abgerufen):

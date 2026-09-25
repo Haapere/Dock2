@@ -37,8 +37,8 @@
 [CmdletBinding()]
 param(
     [switch] $SkipDownload,
-    [string] $DownloadDir = (Join-Path $env:USERPROFILE 'Downloads\kodi-addons'),
-    [string] $StrmDir     = (Join-Path $env:USERPROFILE 'Music\Radio-Streams')
+    [string] $DownloadDir,
+    [string] $StrmDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +52,10 @@ function Write-Fail  { param([string]$m) Write-Host "    [fehl] $m" -ForegroundC
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir   = Split-Path $scriptDir -Parent
 $srcFile   = Join-Path $rootDir 'addons\sources.json'
+
+$homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
+if (-not $DownloadDir) { $DownloadDir = Join-Path $homeDir 'Downloads\kodi-addons' }
+if (-not $StrmDir)     { $StrmDir     = Join-Path $homeDir 'Music\Radio-Streams' }
 $userdata  = Join-Path $env:APPDATA 'Kodi\userdata'
 $backupDir = Join-Path $env:ProgramData 'KodiMediacenter\backup'
 
@@ -259,11 +263,11 @@ if (-not $SkipDownload) {
 
     try {
         foreach ($repo in $cfg.repositories) {
-            $home = $repo.homepage
+            $repoHome = $repo.homepage
 
             # Nur GitHub-Releases lassen sich zuverlaessig automatisch aufloesen
-            if ($home -notmatch 'github\.com/([^/]+)/([^/]+)') {
-                Write-Warn2 "$($repo.name): automatischer Download nicht moeglich -> $home"
+            if ($repoHome -notmatch 'github\.com/([^/]+)/([^/]+)') {
+                Write-Warn2 "$($repo.name): automatischer Download nicht moeglich -> $repoHome"
                 continue
             }
 
@@ -284,12 +288,12 @@ if (-not $SkipDownload) {
                     Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $target -UseBasicParsing -TimeoutSec 300
                     Write-Ok "$($repo.name): $($asset.name)"
                 } elseif ($rel.PSObject.Properties.Name -contains 'zipball_url') {
-                    Write-Warn2 "$($repo.name): kein fertiges ZIP im Release. Bitte von Hand holen: $home/releases"
+                    Write-Warn2 "$($repo.name): kein fertiges ZIP im Release. Bitte von Hand holen: $repoHome/releases"
                 } else {
-                    Write-Warn2 "$($repo.name): keine Release-Dateien gefunden. $home"
+                    Write-Warn2 "$($repo.name): keine Release-Dateien gefunden. $repoHome"
                 }
             } catch {
-                Write-Warn2 "$($repo.name): Download fehlgeschlagen ($($_.Exception.Message.Split([char]10)[0])). Manuell: $home"
+                Write-Warn2 "$($repo.name): Download fehlgeschlagen ($($_.Exception.Message.Split([char]10)[0])). Manuell: $repoHome"
             }
         }
     } finally {
