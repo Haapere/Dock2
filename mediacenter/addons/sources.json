@@ -1,0 +1,185 @@
+{
+  "_comment": [
+    "Quellenliste fuer Kodi-Add-ons. Wird von scripts/06-install-addons.ps1 gelesen.",
+    "",
+    "WICHTIG - inoffizielle Add-ons altern schnell. Jede Quelle hat ein Feld",
+    "'verified' mit dem Stand, zu dem sie geprueft wurde, und 'risk' mit einer",
+    "Einschaetzung. Vor der Installation immer kurz die 'homepage' oeffnen und",
+    "schauen, ob das Projekt noch gepflegt wird.",
+    "",
+    "tier 1 = offizielles Kodi-Repository, in Kodi direkt installierbar",
+    "tier 2 = eigenes Repository des Entwicklers, als ZIP zu installieren",
+    "tier 3 = Einzel-Add-on als ZIP, kein Auto-Update"
+  ],
+
+  "official": [
+    {
+      "id": "inputstream.adaptive",
+      "name": "InputStream Adaptive",
+      "tier": 1,
+      "required": true,
+      "purpose": "Pflicht fuer MPEG-DASH. Ohne dieses Add-on liefert YouTube nur die schlechteren kombinierten Streams (AAC ~126 kbit/s) statt getrennter Opus-Audiospuren.",
+      "install": "Kodi -> Add-ons -> Aus Repository installieren -> Kodi Add-on Repository -> VideoPlayer InputStream -> InputStream Adaptive",
+      "homepage": "https://github.com/xbmc/inputstream.adaptive"
+    },
+    {
+      "id": "plugin.video.youtube",
+      "name": "YouTube",
+      "tier": 1,
+      "required": true,
+      "purpose": "DJ-Sets und Mixe. Mit DASH + Opus als Audioquelle deutlich besser als der Standard-Stream.",
+      "install": "Kodi -> Add-ons -> Aus Repository installieren -> Kodi Add-on Repository -> Video-Add-ons -> YouTube",
+      "homepage": "https://github.com/anxdpanic/plugin.video.youtube",
+      "notes": [
+        "Benoetigt eigene API-Schluessel (Google Cloud Console, YouTube Data API v3).",
+        "Ohne eigene Schluessel laeuft das Add-on nur eingeschraenkt oder gar nicht.",
+        "Konfiguration fuer Audio-Only siehe addons/youtube-audio-hq.md"
+      ]
+    },
+    {
+      "id": "plugin.video.arteplussept",
+      "name": "ARTE+7",
+      "tier": 1,
+      "required": false,
+      "purpose": "Arte-Mediathek inklusive Konzertmitschnitten und Elektro-Dokus.",
+      "install": "Kodi -> Add-ons -> Aus Repository installieren -> Kodi Add-on Repository -> Video-Add-ons -> ARTE+7",
+      "homepage": "https://github.com/rysson/plugin.video.arteplussept",
+      "notes": ["Sprache in den Add-on-Einstellungen auf Deutsch stellen."]
+    },
+    {
+      "id": "plugin.audio.soundcloud",
+      "name": "SoundCloud",
+      "tier": 1,
+      "required": false,
+      "purpose": "DJ-Sets und Tracks von SoundCloud.",
+      "install": "Kodi -> Add-ons -> Aus Repository installieren -> Kodi Add-on Repository -> Musik-Add-ons -> SoundCloud",
+      "homepage": "https://github.com/kodi-community-addons/plugin.audio.soundcloud",
+      "risk": "mittel",
+      "notes": [
+        "SoundCloud aendert seine interne API regelmaessig - das Add-on faellt dadurch immer wieder zeitweise aus.",
+        "Falls es nicht laeuft: im Add-on eine eigene Client-ID hinterlegen oder auf den Browser ausweichen."
+      ]
+    }
+  ],
+
+  "repositories": [
+    {
+      "id": "repository.mixcloud",
+      "name": "Mixcloud (jackyNIX)",
+      "tier": 3,
+      "purpose": "Mixcloud-DJ-Sets direkt in Kodi.",
+      "homepage": "https://github.com/jackyNIX/xbmc-mixcloud-plugin",
+      "zipHint": "Release-ZIP von der GitHub-Seite herunterladen",
+      "risk": "hoch",
+      "verified": "Projekt existiert, letzte gepflegte Versionen zielen auf aeltere Kodi-Generationen",
+      "notes": [
+        "Das Add-on wurde urspruenglich fuer Kodi 18/19 gebaut. Auf Kodi 21 laeuft es haeufig nicht mehr.",
+        "Realistische Alternativen fuer Mixcloud siehe addons/README.md, Abschnitt 'Wenn Mixcloud nicht laeuft'."
+      ]
+    },
+    {
+      "id": "script.radioparadise",
+      "name": "Radio Paradise (alxndr42)",
+      "tier": 3,
+      "purpose": "Radio Paradise mit FLAC, Titelanzeige und Cover-Slideshow.",
+      "homepage": "https://codeberg.org/alxndr42/script.radioparadise",
+      "mirror": "https://github.com/alxndr42/script.radioparadise",
+      "zipHint": "Release-ZIP von Codeberg oder GitHub",
+      "risk": "niedrig",
+      "verified": "Aktiv gepflegt, setzt Kodi 20 oder neuer voraus",
+      "notes": [
+        "Optional. Die FLAC-Streams laufen auch ohne Add-on ueber die vom Setup angelegten Favoriten.",
+        "Vorteil des Add-ons: Titel-/Cover-Anzeige und Kanalwahl."
+      ]
+    },
+    {
+      "id": "plugin.video.mediathekview",
+      "name": "MediathekView (ARD/ZDF/Arte/3Sat)",
+      "tier": 2,
+      "purpose": "Gemeinsame Suche ueber alle oeffentlich-rechtlichen Mediatheken.",
+      "homepage": "https://github.com/mediathekview/plugin.video.mediathekview",
+      "zipHint": "Repository-ZIP aus den GitHub-Releases",
+      "risk": "niedrig",
+      "verified": "Nicht mehr im offiziellen Kodi-Repository, Installation ueber das eigene Repo",
+      "notes": [
+        "Laedt eine Datenbank mit ueber 200.000 Eintraegen herunter und haelt sie lokal aktuell.",
+        "Erster Import dauert auf dem N5095 einige Minuten und belastet die CPU - danach ist die Suche schnell."
+      ]
+    },
+    {
+      "id": "plugin.video.ardundzdf",
+      "name": "ARD und ZDF (rols1)",
+      "tier": 3,
+      "purpose": "ARD, ZDF, 3Sat, phoenix, KiKA, Live-TV und Live-Radio in einem Add-on.",
+      "homepage": "https://github.com/rols1/Kodi-Addon-ARDundZDF",
+      "zipHint": "Release-ZIP von GitHub",
+      "risk": "niedrig",
+      "verified": "Aktiv gepflegt, deutschsprachig",
+      "notes": ["Schlankere Alternative zu MediathekView - keine lokale Datenbank noetig."]
+    }
+  ],
+
+  "directStreams": {
+    "_comment": [
+      "Diese Streams brauchen KEIN Add-on. Sie werden als Favoriten und als",
+      "STRM-Dateien angelegt und funktionieren damit auch dann noch, wenn ein",
+      "Add-on nach einem Kodi-Update ausfaellt. Das ist der stabilste Teil",
+      "des gesamten Setups.",
+      "",
+      "Die URLs sind der Stand der offiziellen Stream-Listen. Falls ein Stream",
+      "nicht startet: tools/test-streams.ps1 ausfuehren und die offizielle",
+      "Seite unter 'source' pruefen."
+    ],
+    "source": "https://radioparadise.com/listen/stream-links",
+    "items": [
+      {
+        "name": "Radio Paradise - Main Mix (FLAC)",
+        "url": "https://stream.radioparadise.com/flac",
+        "format": "FLAC 16 Bit / 44,1 kHz",
+        "group": "Radio Paradise"
+      },
+      {
+        "name": "Radio Paradise - Main Mix (FLAC, mit Titelanzeige)",
+        "url": "https://stream.radioparadise.com/flacm",
+        "format": "FLAC 16 Bit / 44,1 kHz + Metadaten",
+        "group": "Radio Paradise"
+      },
+      {
+        "name": "Radio Paradise - Mellow Mix (FLAC)",
+        "url": "https://stream.radioparadise.com/mellow-flac",
+        "format": "FLAC 16 Bit / 44,1 kHz",
+        "group": "Radio Paradise"
+      },
+      {
+        "name": "Radio Paradise - Rock Mix (FLAC)",
+        "url": "https://stream.radioparadise.com/rock-flac",
+        "format": "FLAC 16 Bit / 44,1 kHz",
+        "group": "Radio Paradise"
+      },
+      {
+        "name": "Radio Paradise - Global Mix (FLAC)",
+        "url": "https://stream.radioparadise.com/global-flac",
+        "format": "FLAC 16 Bit / 44,1 kHz",
+        "group": "Radio Paradise"
+      },
+      {
+        "name": "Radio Paradise - Main Mix (AAC 320, Rueckfallebene)",
+        "url": "https://stream.radioparadise.com/aac-320",
+        "format": "AAC 320 kbit/s",
+        "group": "Radio Paradise"
+      },
+      {
+        "name": "NTS Radio 1",
+        "url": "https://stream-relay-geo.ntslive.net/stream",
+        "format": "AAC, verlustbehaftet",
+        "group": "NTS"
+      },
+      {
+        "name": "NTS Radio 2",
+        "url": "https://stream-relay-geo.ntslive.net/stream2",
+        "format": "AAC, verlustbehaftet",
+        "group": "NTS"
+      }
+    ]
+  }
+}

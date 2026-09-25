@@ -1,0 +1,26 @@
+# ===========================================================================
+# 20-nacht.txt  -  Leises Hoeren ohne Bassverlust
+# ===========================================================================
+# Einbinden mit:
+#     Include: 20-nacht.txt
+#
+# Bei geringer Lautstaerke nimmt das Ohr Bass und Hochton schwaecher wahr
+# (Kurven gleicher Lautstaerke nach Fletcher-Munson). Diese Datei gleicht
+# das dezent aus - und senkt gleichzeitig den Pegelbereich, der abends durch
+# Waende geht.
+#
+# Nicht zusammen mit 10-raummoden-techno.txt laden, sondern als Alternative,
+# oder beide einbinden und den Preamp anpassen.
+# ===========================================================================
+
+Preamp: -4 dB
+
+# Leichte Bassanhebung fuer leises Hoeren
+Filter  1: ON LSC Fc 90 Hz Gain 3.0 dB Q 0.7
+
+# 50-80 Hz ist der Bereich, der durch Waende und Decken wandert - hier gezielt
+# zuruecknehmen, damit die Nachbarn nichts abbekommen
+Filter  2: ON PK Fc 63 Hz Gain -4.0 dB Q 2.0
+
+# Praesenz leicht anheben, damit Details bei niedrigem Pegel nicht verschwinden
+Filter  3: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.7

@@ -1,0 +1,21 @@
+# ===========================================================================
+# Beispiel fuer C:\Program Files\EqualizerAPO\config\config.txt
+# ===========================================================================
+# Diese Datei NICHT einfach kopieren, sondern als Vorlage benutzen. Die
+# Zeile "Device:" muss zum Namen deines Geraets passen, wie ihn der
+# Equalizer APO Configurator anzeigt.
+#
+# Die mitgelieferten Presets gehoeren in denselben Ordner wie diese Datei.
+# ===========================================================================
+
+# --- AV-Receiver ueber HDMI ------------------------------------------------
+# Greift nur, wenn Kodi NICHT im Exklusivmodus spielt. Siehe docs/05.
+Device: HDMI
+Include: 10-raummoden-techno.txt
+
+# --- USB-C DAC / Kopfhoerer ------------------------------------------------
+Device: USB
+Include: 30-kopfhoerer-dac.txt
+
+# --- ab hier wieder alle Geraete -------------------------------------------
+Device:

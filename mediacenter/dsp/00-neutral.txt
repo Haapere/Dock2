@@ -1,0 +1,11 @@
+# ===========================================================================
+# 00-neutral.txt  -  Ausgangspunkt ohne Klangeingriff
+# ===========================================================================
+# In C:\Program Files\EqualizerAPO\config\config.txt einbinden mit:
+#     Include: 00-neutral.txt
+#
+# Diese Datei aendert nichts. Sie dient als Vergleichsstellung: erst neutral
+# hoeren, dann ein Preset einbinden und den Unterschied beurteilen.
+# ===========================================================================
+
+Preamp: 0 dB

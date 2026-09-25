@@ -1,0 +1,11 @@
+# Windows-Zeilenenden beim Auschecken erzwingen.
+# PowerShell kommt zwar mit LF zurecht, aber Notepad und der Windows-
+# Aufgabenplaner zeigen LF-Dateien als eine einzige lange Zeile.
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.xml  text eol=crlf
+*.json text eol=crlf
+*.txt  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.md   text eol=crlf

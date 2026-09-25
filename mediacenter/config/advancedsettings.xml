@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  advancedsettings.xml - Hi-Res Streaming Profil
+  Zielsystem : BMax B3 Pro / Intel Celeron N5095 / 8 GB RAM / Windows 11
+  Zielordner : %APPDATA%\Kodi\userdata\advancedsettings.xml
+  Zweck      : Grosser RAM-Puffer gegen Aussetzer bei mehrstuendigen DJ-Sets
+               und FLAC-Streams. Wird von scripts/04-deploy-kodi-config.ps1
+               automatisch ausgerollt (mit Backup der Vorgaengerdatei).
+
+  WICHTIG: Kodi liest diese Datei NUR beim Start. Nach Aenderungen Kodi neu starten.
+-->
+<advancedsettings version="1.0">
+
+  <!-- ================================================================
+       CACHE / RAM-PUFFER
+       ================================================================
+       memorysize : Groesse des Vorwaertspuffers in BYTE.
+                    Kodi reserviert bis zum 3-fachen dieses Wertes im RAM.
+                    209715200 Byte = 200 MiB  ->  bis ca. 600 MiB RAM.
+                    Bei 8 GB RAM unproblematisch.
+                    Reicht bei einem 1000 kbit/s Stream fuer ca. 25 Minuten
+                    Vorlauf, bei FLAC 44.1/16 (ca. 900 kbit/s) aehnlich.
+
+       Wenn der Mini-PC zusaetzlich noch andere Dienste faehrt, auf
+       104857600 (100 MiB) reduzieren. Fuer maximale Sicherheit bei sehr
+       langen Sets: 314572800 (300 MiB -> bis 900 MiB RAM).
+
+       buffermode : 0 = nur Internet-Streams puffern (Kodi-Standard)
+                    1 = ALLE Dateisysteme puffern, auch lokal + SMB  <- gesetzt
+                    2 = nur echte Internet-Streams
+                    3 = gar nicht puffern
+                    4 = alles ausser lokalen Dateien
+                    1 ist hier richtig, weil Add-on-Streams (Mixcloud,
+                    SoundCloud, YouTube-DASH) nicht immer als "Internet-
+                    Stream" erkannt werden und sonst ungepuffert laufen.
+
+       readfactor : Wie schnell Kodi gegenueber der Wiedergabe-Bitrate liest.
+                    Standard 4.0. 20 fuellt den Puffer sehr schnell.
+                    Falls ein Anbieter bei zu schnellem Lesen drosselt
+                    (Abbrueche kurz nach Start), auf 10 oder 6 reduzieren.
+
+       chunksize  : Lesegroesse in Byte. 131072 = 128 KiB ist ein guter
+                    Kompromiss fuer HTTP-Streams.
+  -->
+  <cache>
+    <buffermode>1</buffermode>
+    <memorysize>209715200</memorysize>
+    <readfactor>20</readfactor>
+    <chunksize>131072</chunksize>
+  </cache>
+
+  <!-- ================================================================
+       NETZWERK-TIMEOUTS
+       ================================================================
+       Grosszuegige Timeouts verhindern, dass Kodi einen langsam
+       anlaufenden FLAC- oder DASH-Stream vorzeitig abbricht.
+
+       curlclienttimeout : Verbindungs-Timeout in Sekunden (Standard 10)
+       curllowspeedtime  : Sekunden unterhalb der Mindestgeschwindigkeit,
+                           bevor abgebrochen wird (Standard 20)
+       cachemembuffersize wurde in Kodi 18 durch <cache> oben ersetzt -
+       nicht mehr verwenden.
+  -->
+  <network>
+    <curlclienttimeout>30</curlclienttimeout>
+    <curllowspeedtime>20</curllowspeedtime>
+    <!-- Nur aktivieren, wenn IPv6 im Heimnetz Probleme macht:
+    <disableipv6>true</disableipv6>
+    -->
+  </network>
+
+  <!-- ================================================================
+       AUDIO
+       ================================================================
+       applydrc : Dynamikkompression bei AC3/DTS-Downmix.
+                  0 = aus. Fuer audiophilen Betrieb korrekt, da der
+                  AV-Receiver die Dynamik selbst verwaltet.
+  -->
+  <audio>
+    <applydrc>0</applydrc>
+  </audio>
+
+  <!-- ================================================================
+       MUSIK-BIBLIOTHEK
+       ================================================================
+       Da der Fokus auf Streaming liegt, laeuft die Bibliothek nur
+       nebenbei. Hintergrund-Updates vermeiden Ruckler waehrend der
+       Wiedergabe.
+  -->
+  <musiclibrary>
+    <backgroundupdate>true</backgroundupdate>
+  </musiclibrary>
+
+  <!-- ================================================================
+       OBERFLAECHE / PERFORMANCE
+       ================================================================
+       Der N5095 hat wenig GPU-Reserven. Dirty-Region-Rendering
+       reduziert die GPU-Last im Menue deutlich.
+       3 = nur geaenderte Bildbereiche neu zeichnen.
+  -->
+  <gui>
+    <algorithmdirtyregions>3</algorithmdirtyregions>
+  </gui>
+
+  <!-- Splash-Screen aus: Kodi startet spuerbar schneller (Headless-Autostart) -->
+  <splash>false</splash>
+
+  <!-- Log-Level: 0 = normal. Fuer Fehlersuche auf 1 setzen und Kodi neu starten.
+       Log liegt unter %APPDATA%\Kodi\kodi.log -->
+  <loglevel>0</loglevel>
+
+</advancedsettings>

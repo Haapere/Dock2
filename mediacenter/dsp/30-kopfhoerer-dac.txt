@@ -1,0 +1,27 @@
+# ===========================================================================
+# 30-kopfhoerer-dac.txt  -  Profil fuer den USB-C DAC am Schreibtisch
+# ===========================================================================
+# Wichtig: Equalizer APO arbeitet PRO GERAET. Damit dieses Profil nur den
+# Kopfhoerer betrifft und nicht den AV-Receiver, muss es an das DAC-Geraet
+# gebunden werden.
+#
+# In config.txt:
+#     Device: USB   # Teilstring des DAC-Namens, wie im Configurator gelistet
+#     Include: 30-kopfhoerer-dac.txt
+#     Device:       # bindet die folgenden Zeilen wieder an alle Geraete
+#
+# Die Werte hier sind bewusst zurueckhaltend: eine sanfte Absenkung der
+# oberen Mitten, die bei vielen guenstigen In-Ears bei laengerem Hoeren
+# anstrengend wirken, plus etwas Subbass.
+# ===========================================================================
+
+Preamp: -3 dB
+
+# Subbass-Fundament, das kleine Treiber nicht von allein liefern
+Filter  1: ON LSC Fc 70 Hz Gain 2.5 dB Q 0.7
+
+# Typische Schaerfe vieler Kopfhoerer im Bereich 3-5 kHz entschaerfen
+Filter  2: ON PK Fc 3800 Hz Gain -2.5 dB Q 2.0
+
+# Zischlaute daempfen
+Filter  3: ON PK Fc 7500 Hz Gain -2.0 dB Q 3.0

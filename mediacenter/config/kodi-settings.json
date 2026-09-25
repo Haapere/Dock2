@@ -1,0 +1,97 @@
+{
+  "_comment": [
+    "Deklarative Kodi-Einstellungen. Wird von scripts/05-apply-audio-settings.ps1",
+    "ueber JSON-RPC angewendet (Kodi muss laufen, Webserver muss aktiv sein).",
+    "Enum-Werte werden NICHT hart kodiert, sondern zur Laufzeit ueber die von",
+    "Kodi gelieferten Options-Labels aufgeloest - dadurch sprachunabhaengig und",
+    "versionsfest. Kandidatenlisten enthalten deutsche und englische Labels."
+  ],
+
+  "boolean": {
+    "services.webserver":              true,
+    "services.webserverauthentication": true,
+    "services.esenabled":              true,
+    "services.esallinterfaces":        true,
+    "services.zeroconf":               true,
+    "services.upnp":                   true,
+    "services.upnpannounce":           true,
+
+    "audiooutput.passthrough":         true,
+    "audiooutput.ac3passthrough":      true,
+    "audiooutput.eac3passthrough":     true,
+    "audiooutput.dtspassthrough":      true,
+    "audiooutput.truehdpassthrough":   true,
+    "audiooutput.dtshdpassthrough":    true,
+    "audiooutput.ac3transcode":        false,
+    "audiooutput.stereoupmix":         false,
+    "audiooutput.maintainoriginalvolume": true,
+
+    "videoplayer.usedisplayasclock":   false,
+
+    "musicplayer.replaygainavoidclipping": true,
+    "musicfiles.usetags":              true,
+
+    "powermanagement.displaysoff":     false
+  },
+
+  "integer": {
+    "services.webserverport": 8080,
+    "services.esport":        9777,
+    "audiooutput.channels":   1,
+    "musicplayer.replaygaintype": 0
+  },
+
+  "string": {
+    "services.webserverusername": "kodi",
+    "services.webskin": "webinterface.default"
+  },
+
+  "enumByLabel": {
+    "_comment": "setting-id -> Liste akzeptierter Option-Labels, erste Treffer gewinnt",
+
+    "audiooutput.config": [
+      "Best Match", "Beste Uebereinstimmung", "Beste Übereinstimmung",
+      "Bestmoegliche Uebereinstimmung", "Bestmögliche Übereinstimmung"
+    ],
+
+    "audiooutput.streamsilence": [
+      "Always", "Immer"
+    ],
+
+    "audiooutput.guisoundmode": [
+      "Never", "Nie"
+    ],
+
+    "audiooutput.processquality": [
+      "High", "Hoch", "Really high", "Sehr hoch"
+    ],
+
+    "audiooutput.channels": [
+      "2.0", "2.0 - Stereo", "Stereo"
+    ]
+  },
+
+  "deviceMatch": {
+    "_comment": [
+      "audiooutput.audiodevice wird ueber Teilstring-Suche in den von Kodi",
+      "gemeldeten Geraetenamen aufgeloest. 'WASAPI' ist Pflicht - DirectSound",
+      "kann kein Exclusive und kein Passthrough.",
+      "receiverHints wird zusaetzlich gesucht; passe die Liste an den Namen",
+      "deines AV-Receivers an (steht in Windows unter Sound -> Wiedergabe)."
+    ],
+    "setting": "audiooutput.audiodevice",
+    "require": ["WASAPI"],
+    "receiverHints": [
+      "Denon", "Marantz", "Onkyo", "Pioneer", "Yamaha", "Sony", "Harman",
+      "AVR", "Receiver", "HDMI"
+    ]
+  },
+
+  "notes": {
+    "audiooutput.channels": "Wert 1 entspricht in aktuellen Kodi-Versionen 2.0 Stereo; das Skript verifiziert das zusaetzlich ueber enumByLabel und korrigiert bei Bedarf.",
+    "audiooutput.streamsilence": "'Always' haelt den HDMI-Audiopfad offen. Verhindert abgeschnittene Titelanfaenge, weil der AV-Receiver sonst bei jedem Track neu synchronisieren muss.",
+    "videoplayer.usedisplayasclock": "MUSS false bleiben. true resampelt Audio auf die Bildwiederholrate und zerstoert Bit-Perfect.",
+    "audiooutput.ac3transcode": "Nur fuer SPDIF/optisch relevant. Ueber HDMI schaedlich, daher false.",
+    "musicplayer.replaygaintype": "0 = kein ReplayGain. Bei DJ-Sets erwuenscht, da die Sets bereits gemastert sind."
+  }
+}

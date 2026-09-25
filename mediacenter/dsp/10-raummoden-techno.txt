@@ -1,0 +1,53 @@
+# ===========================================================================
+# 10-raummoden-techno.txt  -  Droehnende Baesse in Wohnraeumen baendigen
+# ===========================================================================
+# Einbinden in C:\Program Files\EqualizerAPO\config\config.txt:
+#     Preamp: -6 dB
+#     Include: 10-raummoden-techno.txt
+#
+# ACHTUNG - DIESE WERTE SIND EIN STARTPUNKT, KEINE LOESUNG
+# --------------------------------------------------------
+# Raummoden haengen von den Raummassen ab, nicht vom Musikstil. Die hier
+# gesetzten Frequenzen treffen die typischen Laengs- und Quermoden eines
+# Wohnzimmers von etwa 4 x 5 m mit 2,5 m Deckenhoehe. In deinem Raum liegen
+# sie woanders.
+#
+# Richtig gemessen wird so:
+#   1. REW (Room EQ Wizard, kostenlos) installieren
+#   2. Messmikrofon an die Hoerposition (schon ein UMIK-1 genuegt)
+#   3. Sweep 20-200 Hz aufnehmen
+#   4. Die zwei bis drei hoechsten schmalen Spitzen ablesen
+#   5. Unten Fc auf genau diese Frequenzen setzen
+#
+# Ohne Messmikrofon geht es auch per Gehoer:
+#   Einen langsamen Sinus-Sweep 30-120 Hz abspielen (z. B. von YouTube) und
+#   notieren, bei welchen Frequenzen es im Raum deutlich lauter wird oder
+#   etwas mitschwingt. Das sind deine Moden.
+#
+# GRUNDREGELN
+#   - Nur absenken, nie anheben. Eine Raummode laesst sich nicht "auffuellen".
+#   - Schmal arbeiten: Q zwischen 4 und 10. Breite Eingriffe nehmen dem
+#     Bass die Substanz.
+#   - Preamp mitfuehren: bei jedem Boost muesste der Preamp runter. Da wir
+#     nur absenken, reichen -3 dB Reserve.
+# ===========================================================================
+
+Preamp: -3 dB
+
+# --- Laengsmode, typisch 40-50 Hz: das "Wummern" bei Kickdrums ------------
+Filter  1: ON PK Fc 45 Hz Gain -6.0 dB Q 6.0
+
+# --- Quermode, typisch 60-70 Hz: macht Bass-Sweeps ungleichmaessig --------
+Filter  2: ON PK Fc 63 Hz Gain -4.5 dB Q 5.0
+
+# --- Deckenmode, typisch 80-90 Hz: laesst Sub-Baesse "kleben" -------------
+Filter  3: ON PK Fc 85 Hz Gain -3.5 dB Q 6.0
+
+# --- Oberer Bass 120-160 Hz: Draufgabe gegen Muff bei lauten Sets ---------
+#     Breiter und flacher als die Moden darunter.
+Filter  4: ON PK Fc 140 Hz Gain -2.0 dB Q 1.8
+
+# --- Subsonic-Filter -------------------------------------------------------
+#     Unter 25 Hz hoert man nichts mehr, aber die Membranen arbeiten.
+#     Der Hochpass verschafft dem Verstaerker Reserve und dem Bass Kontur.
+Filter  5: ON HPQ Fc 22 Hz Q 0.7
