@@ -11,7 +11,6 @@
     "tier 2 = eigenes Repository des Entwicklers, als ZIP zu installieren",
     "tier 3 = Einzel-Add-on als ZIP, kein Auto-Update"
   ],
-
   "official": [
     {
       "id": "inputstream.adaptive",
@@ -44,7 +43,9 @@
       "purpose": "Arte-Mediathek inklusive Konzertmitschnitten und Elektro-Dokus.",
       "install": "Kodi -> Add-ons -> Aus Repository installieren -> Kodi Add-on Repository -> Video-Add-ons -> ARTE+7",
       "homepage": "https://github.com/rysson/plugin.video.arteplussept",
-      "notes": ["Sprache in den Add-on-Einstellungen auf Deutsch stellen."]
+      "notes": [
+        "Sprache in den Add-on-Einstellungen auf Deutsch stellen."
+      ]
     },
     {
       "id": "plugin.audio.soundcloud",
@@ -61,7 +62,6 @@
       ]
     }
   ],
-
   "repositories": [
     {
       "id": "repository.mixcloud",
@@ -115,10 +115,11 @@
       "zipHint": "Release-ZIP von GitHub",
       "risk": "niedrig",
       "verified": "Aktiv gepflegt, deutschsprachig",
-      "notes": ["Schlankere Alternative zu MediathekView - keine lokale Datenbank noetig."]
+      "notes": [
+        "Schlankere Alternative zu MediathekView - keine lokale Datenbank noetig."
+      ]
     }
   ],
-
   "directStreams": {
     "_comment": [
       "Diese Streams brauchen KEIN Add-on. Sie werden als Favoriten und als",
@@ -181,5 +182,60 @@
         "group": "NTS"
       }
     ]
+  },
+  "candidateStreams": {
+    "_comment": [
+      "UNGEPRUEFTE Kandidaten - bewusst getrennt von directStreams.",
+      "",
+      "Diese URLs stammen aus oeffentlichen Verzeichnissen fuer verlustfreies",
+      "Internetradio, konnten aber nicht selbst getestet werden. Erst pruefen,",
+      "dann bei Erfolg nach directStreams.items verschieben:",
+      "",
+      "  .\\tools\\test-streams.ps1 -Url \"<URL>\"",
+      "",
+      "Verlustfreies Internetradio ist speziell fuer Techno duenn gesaet - die",
+      "meisten FLAC-Sender spielen Rock, Jazz oder Klassik. Die hier gelisteten",
+      "kommen dem Genre am naechsten."
+    ],
+    "items": [
+      {
+        "name": "SECTOR Radio - Progressive (FLAC)",
+        "url": "http://89.223.45.5:8000/progressive-flac",
+        "format": "FLAC",
+        "genre": "Progressive House / Trance",
+        "verified": false,
+        "note": "Genrelich am naechsten an Techno. Server steht in Russland, Erreichbarkeit schwankt. Laeuft ueber Port 8000 - manche Netze blockieren das."
+      },
+      {
+        "name": "SECTOR Radio - Space (FLAC)",
+        "url": "http://89.223.45.5:8000/space-flac",
+        "format": "FLAC",
+        "genre": "Ambient / Space",
+        "verified": false,
+        "note": "Ruhigere Schiene desselben Senders."
+      },
+      {
+        "name": "Riverside Radio (FLAC)",
+        "url": "https://stream.and-stuff.nl:8443/live-riverside-flac",
+        "format": "FLAC 24 Bit",
+        "genre": "gemischt",
+        "verified": false,
+        "note": "Niederlaendischer Sender, 24 Bit. Kein Techno, aber technisch die hochwertigste Quelle in dieser Liste."
+      }
+    ]
+  },
+  "generators": {
+    "_comment": [
+      "Quellen, die nicht als feste URL-Liste gepflegt werden, sondern zur",
+      "Laufzeit abgerufen werden. Das ist der robustere Weg: zieht ein Anbieter",
+      "um oder benennt Kanaele um, bleibt die Sammlung gueltig."
+    ],
+    "somafm": {
+      "script": "tools/fetch-somafm.ps1",
+      "api": "https://somafm.com/channels.json",
+      "purpose": "SomaFM ist fuer elektronische Musik eine der besten freien Quellen: werbefrei, hoerergestuetzt, kuratiert. Relevante Kanaele: Beat Blender (Deep House), Groove Salad (Downtempo), The Trip (Progressive/Psytrance), Dub Step Beyond, Cliqhop idm, Space Station Soma.",
+      "quality": "bis 256 kbit/s MP3; zusaetzlich ein experimenteller verlustfreier FLAC-Stream ueber HLS (-IncludeFlac)",
+      "usage": ".\\tools\\fetch-somafm.ps1 -ListOnly   bzw. ohne -ListOnly zum Anlegen"
+    }
   }
 }

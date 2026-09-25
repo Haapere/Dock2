@@ -1,0 +1,109 @@
+{
+  "_comment": [
+    "Kuratierte Quellen fuer Techno und DJ-Sets. Wird von tools/dj-fetch.ps1 gelesen.",
+    "",
+    "Die Liste ist ein Startpunkt - trag ein, was du wirklich hoerst. Jeder Eintrag",
+    "wird beim Abruf nach Datum sortiert, und es werden nur die neuesten N Sets",
+    "geholt (Standard 3), damit die Platte nicht volllaeuft.",
+    "",
+    "WICHTIG: Kanal- und Profil-URLs aendern sich. Wenn ein Abruf leer bleibt,",
+    "die URL im Browser oeffnen und pruefen."
+  ],
+
+  "defaults": {
+    "maxPerSource": 3,
+    "minDurationMinutes": 20,
+    "audioFormat": "best",
+    "embedMetadata": true,
+    "embedThumbnail": true
+  },
+
+  "sources": [
+    {
+      "name": "HOER Berlin",
+      "platform": "youtube",
+      "url": "https://www.youtube.com/@HOERBERLIN/videos",
+      "genre": "Techno / House",
+      "note": "Taegliche Sets aus dem gekachelten Raum in Berlin. Sehr konstante Qualitaet, meist 60 Minuten.",
+      "maxPerSource": 4
+    },
+    {
+      "name": "Boiler Room",
+      "platform": "youtube",
+      "url": "https://www.youtube.com/@boilerroom/videos",
+      "genre": "gemischt elektronisch",
+      "note": "Breites Spektrum, nicht nur Techno. Filter ueber minDurationMinutes hilft."
+    },
+    {
+      "name": "Cercle",
+      "platform": "youtube",
+      "url": "https://www.youtube.com/@Cercle/videos",
+      "genre": "Melodic Techno / House",
+      "note": "Sets an aussergewoehnlichen Orten, meist 60-90 Minuten."
+    },
+    {
+      "name": "Awakenings",
+      "platform": "youtube",
+      "url": "https://www.youtube.com/@awakenings/videos",
+      "genre": "Techno",
+      "note": "Festival-Mitschnitte, oft mehrere Stunden."
+    },
+    {
+      "name": "Drumcode",
+      "platform": "soundcloud",
+      "url": "https://soundcloud.com/drumcode/tracks",
+      "genre": "Techno",
+      "note": "Adam Beyers Label. Drumcode Radio laeuft woechentlich."
+    },
+    {
+      "name": "Slam Radio",
+      "platform": "soundcloud",
+      "url": "https://soundcloud.com/slam/tracks",
+      "genre": "Techno",
+      "note": "Woechentliche Show aus Glasgow, meist Gastmixe."
+    },
+    {
+      "name": "hearthis.at - Hard Techno",
+      "platform": "hearthis",
+      "url": "https://hearthis.at/categories/techno/hard-techno/",
+      "genre": "Hard Techno",
+      "note": "Viele Sets sind hier ausdruecklich als freier Download eingestellt - die saubersten Quellen ueberhaupt."
+    },
+    {
+      "name": "hearthis.at - DJ Live Sets",
+      "platform": "hearthis",
+      "url": "https://hearthis.at/categories/techno/techno-dj-live-set/",
+      "genre": "Techno",
+      "note": "Live-Mitschnitte, haeufig mit Download-Freigabe."
+    }
+  ],
+
+  "podcastFeeds": {
+    "_comment": [
+      "Radioshows mit echtem RSS-Feed. Diese sind die stabilste Quelle ueberhaupt:",
+      "kein Scraping, keine API, nur ein Feed. yt-dlp und fast jeder Podcatcher",
+      "kommen damit klar.",
+      "",
+      "Feed-URL einer Show findest du meist ueber die Suche",
+      "  <Showname> podcast rss feed",
+      "oder in der Adresszeile, wenn du die Show in einem Podcatcher abonnierst."
+    ],
+    "items": []
+  },
+
+  "notes": {
+    "rechtliches": [
+      "Sets, die ausdruecklich als 'Free Download' markiert sind (auf hearthis.at",
+      "sehr verbreitet, auf SoundCloud per Download-Button), sind unproblematisch.",
+      "",
+      "Bei allem anderen bewegt sich das Herunterladen in einer Grauzone: Ein",
+      "SoundCloud-Go+-Abo bezahlt das Hoeren in der App, nicht das Anlegen einer",
+      "eigenen Kopie. Fuer den privaten Gebrauch auf dem eigenen Geraet ist das",
+      "in der Praxis das, was auch die Offline-Funktion der App tut - weiterverbreiten",
+      "darf man es nicht.",
+      "",
+      "Praktische Empfehlung: Wo ein Free-Download angeboten wird, diesen nutzen.",
+      "Das ist nicht nur sauber, sondern liefert oft auch die bessere Datei."
+    ]
+  }
+}

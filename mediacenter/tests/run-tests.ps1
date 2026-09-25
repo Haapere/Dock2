@@ -88,6 +88,19 @@ T "enumByLabel hat audiooutput.config" ($null -ne $ks.enumByLabel.'audiooutput.c
 
 $src = Get-Content "$root/addons/sources.json" -Raw | ConvertFrom-Json
 T "sources.json parsebar" ($null -ne $src)
+T "candidateStreams getrennt von directStreams" ($null -ne $src.candidateStreams)
+$unver = @($src.candidateStreams.items | Where-Object { $_.verified -ne $false })
+T "alle Kandidaten als ungeprueft markiert" ($unver.Count -eq 0) "nicht markiert: $($unver.name -join ', ')"
+T "SomaFM-Generator hinterlegt" ($null -ne $src.generators.somafm)
+
+$dj = Get-Content "$root/config/dj-sources.json" -Raw | ConvertFrom-Json
+T "dj-sources.json parsebar" ($null -ne $dj)
+T "mind. 5 DJ-Quellen" (@($dj.sources).Count -ge 5)
+$noUrl = @($dj.sources | Where-Object { -not $_.url -or $_.url -notmatch '^https?://' })
+T "alle DJ-Quellen haben gueltige URL" ($noUrl.Count -eq 0) "ohne URL: $($noUrl.name -join ', ')"
+$noPlat = @($dj.sources | Where-Object { $_.platform -notin @('youtube','soundcloud','mixcloud','hearthis','generic') })
+T "alle Plattformen bekannt" ($noPlat.Count -eq 0) "unbekannt: $($noPlat.platform -join ', ')"
+T "Standardwerte gesetzt" ($dj.defaults.maxPerSource -gt 0 -and $dj.defaults.minDurationMinutes -gt 0)
 T "mind. 4 FLAC-Streams" (@($src.directStreams.items | Where-Object { $_.format -match 'FLAC' }).Count -ge 4)
 $allHttps = @($src.directStreams.items | Where-Object { $_.url -notlike 'https://*' })
 T "alle Stream-URLs via https" ($allHttps.Count -eq 0) "Ausnahmen: $($allHttps.name -join ', ')"

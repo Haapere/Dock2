@@ -16,6 +16,11 @@
 .PARAMETER TimeoutSec
     Zeitlimit pro Stream. Standard 10.
 
+.PARAMETER IncludeCandidates
+    Auch die ungeprueften Kandidaten aus sources.json testen. Was hier
+    besteht, kann von candidateStreams nach directStreams.items wandern
+    und wird dann von 06-install-addons.ps1 mit angelegt.
+
 .EXAMPLE
     .\test-streams.ps1
 
@@ -26,7 +31,8 @@
 [CmdletBinding()]
 param(
     [string] $Url,
-    [int]    $TimeoutSec = 10
+    [int]    $TimeoutSec = 10,
+    [switch] $IncludeCandidates
 )
 
 $ErrorActionPreference = 'Stop'
@@ -110,7 +116,15 @@ if ($Url) {
     if (-not (Test-Path $srcFile)) { throw "Quellenliste fehlt: $srcFile" }
     $cfg = Get-Content $srcFile -Raw | ConvertFrom-Json
 
-    foreach ($s in $cfg.directStreams.items) {
+    $toTest = @($cfg.directStreams.items)
+
+    if ($IncludeCandidates -and $cfg.PSObject.Properties.Name -contains 'candidateStreams') {
+        $cand = @($cfg.candidateStreams.items)
+        Write-Host "  (inkl. $($cand.Count) ungeprueften Kandidaten)" -ForegroundColor DarkGray
+        $toTest += $cand
+    }
+
+    foreach ($s in $toTest) {
         Write-Host "  pruefe: $($s.name) ..." -ForegroundColor DarkGray
         $results += Test-OneStream -StreamUrl $s.url -Label $s.name
     }
@@ -132,5 +146,13 @@ if ($bad.Count -eq 0) {
     Write-Host "$($bad.Count) von $($results.Count) Streams nicht erreichbar." -ForegroundColor Yellow
     Write-Host "Aktuelle Radio-Paradise-URLs stehen auf https://radioparadise.com/listen/stream-links"
     Write-Host "Danach addons/sources.json anpassen und scripts/06-install-addons.ps1 erneut ausfuehren."
+}
+
+if ($IncludeCandidates) {
+    Write-Host ""
+    Write-Host "Kandidaten, die bestanden haben, koennen in addons/sources.json von"
+    Write-Host "candidateStreams.items nach directStreams.items verschoben werden."
+    Write-Host "Danach scripts/06-install-addons.ps1 ausfuehren, dann sind sie als"
+    Write-Host "Favoriten und STRM-Dateien verfuegbar."
 }
 Write-Host ""

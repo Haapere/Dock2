@@ -53,6 +53,13 @@ Die Zugangsdaten für Yatse/Kore landen in
 | 6 | `scripts\06-install-addons.ps1` | FLAC-Streams als Favoriten und `.strm`, Add-on-Pakete herunterladen |
 | 7 | `tools\healthcheck.ps1` | Abschlussprüfung mit konkreter To-do-Liste |
 
+Optional, aber für DJ-Sets der größte Hebel:
+
+| | Skript | Wirkung |
+|---|---|---|
+| + | `scripts\07-setup-ytdlp.ps1` | yt-dlp und ffmpeg einrichten, SoundCloud-Go+-Zugang hinterlegen |
+| + | `tools\dj-fetch.ps1` | Sets lokal holen statt streamen – siehe [docs/07-dj-sets.md](docs/07-dj-sets.md) |
+
 Jeder Schritt lässt sich einzeln ausführen und wiederholen. Vor jeder
 Änderung wird gesichert – Backups unter `%ProgramData%\KodiMediacenter\backup\`.
 
@@ -65,13 +72,16 @@ mediacenter/
 ├── install.ps1                      Master-Installer
 ├── config/
 │   ├── advancedsettings.xml         RAM-Puffer gegen Aussetzer bei langen Sets
-│   └── kodi-settings.json           Deklarative Kodi-Einstellungen
-├── scripts/                         Die sechs Setup-Schritte
+│   ├── kodi-settings.json           Deklarative Kodi-Einstellungen
+│   └── dj-sources.json              Kuratierte Techno-Quellen
+├── scripts/                         Die sieben Setup-Schritte
 ├── tools/
 │   ├── KodiRpc.psm1                 JSON-RPC-Client für Kodi
 │   ├── healthcheck.ps1              Systemprüfung
 │   ├── switch-audio.ps1             HDMI ⇄ USB-DAC umschalten
-│   └── test-streams.ps1             Stream-URLs prüfen
+│   ├── test-streams.ps1             Stream-URLs prüfen
+│   ├── dj-fetch.ps1                 DJ-Sets lokal holen (yt-dlp)
+│   └── fetch-somafm.ps1             SomaFM-Kanäle live abrufen
 ├── addons/
 │   ├── sources.json                 Add-on-Quellen und Direkt-Streams
 │   └── youtube-audio-hq.md          YouTube auf Opus/DASH trimmen
@@ -92,10 +102,11 @@ mediacenter/
 | [docs/04-addons.md](docs/04-addons.md) | DJ-Sets, Mediatheken, was zuverlässig läuft und was nicht |
 | [docs/05-equalizer-apo.md](docs/05-equalizer-apo.md) | Raummoden bändigen – und warum der Receiver das meist besser kann |
 | [docs/06-troubleshooting.md](docs/06-troubleshooting.md) | Fehlersuche nach Symptom |
+| [docs/07-dj-sets.md](docs/07-dj-sets.md) | DJ-Sets herunterladen statt streamen – warum das robuster ist |
 
 ---
 
-## Drei Dinge, die man vorher wissen sollte
+## Vier Dinge, die man vorher wissen sollte
 
 **1. Das Windows-Standardformat ist für Kodi bedeutungslos.**
 Viele Anleitungen empfehlen, in den Sound-Eigenschaften „24 Bit, 96 kHz"
@@ -118,6 +129,13 @@ Deshalb ist dieses Setup zweistufig: die FLAC-Streams von Radio Paradise
 laufen als reine Direkt-URLs ohne jedes Add-on und überleben jedes Update.
 Add-ons kommen obendrauf. Details in [docs/04-addons.md](docs/04-addons.md).
 
+**4. Für lange DJ-Sets ist Herunterladen besser als Streamen.**
+Keine Aussetzer, sofortiges Springen an jede Stelle, und dein SoundCloud-Go+-Abo
+liefert 256 kbit/s auch in Kodi – was über die Add-ons nicht geht. Ein einziges
+Werkzeug (`yt-dlp`) ersetzt dabei die Add-ons für Mixcloud, SoundCloud und
+YouTube und wird wöchentlich gepflegt. Details in
+[docs/07-dj-sets.md](docs/07-dj-sets.md).
+
 ---
 
 ## Einzelne Werkzeuge
@@ -137,7 +155,21 @@ powershell.exe -ExecutionPolicy Bypass -File "<Pfad>\tools\switch-audio.ps1" -Ta
 
 **Streams prüfen:**
 ```powershell
-.\tools\test-streams.ps1
+.\tools\test-streams.ps1                       # die eingerichteten
+.\tools\test-streams.ps1 -IncludeCandidates    # plus die ungeprüften Kandidaten
+```
+
+**DJ-Sets holen:**
+```powershell
+.\tools\dj-fetch.ps1 -List
+.\tools\dj-fetch.ps1 -Source "HOER"
+.\tools\dj-fetch.ps1 -Url "https://soundcloud.com/drumcode/..."
+```
+
+**SomaFM-Kanäle einbinden** (Kanalliste wird live abgerufen):
+```powershell
+.\tools\fetch-somafm.ps1 -ListOnly
+.\tools\fetch-somafm.ps1 -IncludeFlac
 ```
 
 **Audiogeräte auflisten:**
