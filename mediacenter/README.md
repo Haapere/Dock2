@@ -13,12 +13,34 @@ Fernseher.
 
 ## Schnellstart
 
-Das Paket auf den Mini-PC kopieren, PowerShell **als Administrator** öffnen:
+ZIP auf den Mini-PC kopieren und **entpacken** (Rechtsklick → *Alle extrahieren*).
+Dann im entpackten Ordner:
+
+**`START.bat` doppelklicken.**
+
+Das ist alles. Die Datei fordert die Administratorrechte selbst an, wechselt in
+den richtigen Ordner und startet die Einrichtung.
+
+Für den täglichen Gebrauch danach: **`MENUE.bat`** – eine Auswahl der
+häufigsten Aufgaben, ohne Befehle zu tippen.
+
+### Oder von Hand
+
+PowerShell **als Administrator** öffnen. Wichtig: PowerShell startet als
+Administrator immer in `C:\Windows\System32` – erst in den entpackten Ordner
+wechseln, sonst findet Windows die Skripte nicht:
 
 ```powershell
-cd <Pfad zum Ordner>\mediacenter
+cd "$env:USERPROFILE\Downloads\kodi-hires-mediacenter\mediacenter"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\install.ps1
+```
+
+Wenn du nicht mehr weißt, wohin du entpackt hast:
+
+```powershell
+Get-ChildItem "$env:USERPROFILE" -Recurse -Filter install.ps1 -ErrorAction SilentlyContinue |
+  Select-Object -First 3 DirectoryName
 ```
 
 Der Installer führt alle sieben Schritte durch und hält an zwei Stellen an,
@@ -71,6 +93,8 @@ Jeder Schritt lässt sich einzeln ausführen und wiederholen. Vor jeder
 
 ```
 mediacenter/
+├── START.bat                        Doppelklick: Setup starten (holt Adminrechte)
+├── MENUE.bat                        Doppelklick: Auswahlmenü für den Alltag
 ├── install.ps1                      Master-Installer
 ├── config/
 │   ├── advancedsettings.xml         RAM-Puffer gegen Aussetzer bei langen Sets
